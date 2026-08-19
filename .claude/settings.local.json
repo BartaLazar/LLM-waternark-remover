@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"import nltk; print\\('nltk', nltk.__version__\\)\")",
+      "Bash(python3 -m pip --version)",
+      "Bash(python3 -m venv .venv)",
+      "Bash(.venv/bin/python -m pip install --quiet --upgrade pip)",
+      "Bash(.venv/bin/python -m pip install --quiet nltk)",
+      "Bash(.venv/bin/python -c \"import nltk; print\\('nltk', nltk.__version__\\)\")",
+      "Bash(.venv/bin/python -c ' *)",
+      "Bash(.venv/bin/python -m pip install --quiet -e .)",
+      "Bash(.venv/bin/synreplace -n 3 -v \"The quick brown fox jumps over the lazy dog while the researchers carefully examined the surprising results of their difficult experiment.\")",
+      "Bash(.venv/bin/python -c \"import pip, os; print\\(pip.__version__, os.path.dirname\\(pip.__file__\\)\\)\")"
+    ]
+  }
+}
