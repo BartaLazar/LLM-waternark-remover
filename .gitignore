@@ -8,3 +8,4 @@ dist/
 .pytest_cache/
 nltk_data/
 .DS_Store
+.claude/settings.local.json
