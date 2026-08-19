@@ -21,21 +21,23 @@ def rewrite(
     senses: int = 1,
     allow_multiword: bool = False,
     slide: bool = False,
+    threshold: float = 0.95,
     finder: Optional[SynonymFinder] = None,
 ) -> Tuple[str, List[Replacement]]:
     """Return the rewritten text and the list of substitutions made.
 
     Every `every`-th word is looked up. Words with no usable synonym -- function
-    words, names, anything WordNet does not cover -- are left alone; with
-    `slide=True` the search moves on to the following word instead, which keeps
-    the substitution rate close to 1-in-N.
+    words, names, anything WordNet does not cover, or a sense too dissimilar to
+    the word's dominant meaning to clear `threshold` (see `SynonymFinder`) --
+    are left alone; with `slide=True` the search moves on to the following word
+    instead, which keeps the substitution rate close to 1-in-N.
     """
     if every < 1:
         raise ValueError("every must be >= 1")
 
     from nltk import pos_tag
 
-    finder = finder or SynonymFinder(senses=senses, allow_multiword=allow_multiword)
+    finder = finder or SynonymFinder(senses=senses, allow_multiword=allow_multiword, threshold=threshold)
     tokens = tokenize(text)
     # Positions of the real words within the full token list; gaps are ignored
     # for counting but stay in `tokens` so the output keeps its formatting.

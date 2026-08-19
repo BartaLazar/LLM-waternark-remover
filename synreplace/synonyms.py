@@ -42,11 +42,20 @@ class SynonymFinder:
     "Closest" means: the most frequent sense of the word (WordNet orders
     synsets by corpus frequency), and within that sense the lemma with the
     highest frequency count.
+
+    `threshold` gates how far `senses` is allowed to stray from that primary
+    sense. A word's own synset is always 100% similar to itself, so with the
+    default `senses=1` every candidate already meets any threshold trivially;
+    the threshold only starts rejecting candidates once `senses > 1` opens up
+    less-related meanings of the word.
     """
 
-    def __init__(self, senses: int = 1, allow_multiword: bool = False) -> None:
+    def __init__(
+        self, senses: int = 1, allow_multiword: bool = False, threshold: float = 0.95
+    ) -> None:
         self.senses = max(1, senses)
         self.allow_multiword = allow_multiword
+        self.threshold = threshold
         self._wn = None
         self._irregulars: Dict[str, Dict[str, Set[str]]] = {}
 
@@ -91,9 +100,15 @@ class SynonymFinder:
         # WordNet returns synsets ordered by how common the sense is, so
         # slicing to `senses` keeps us near the word's dominant meaning.
         synsets = self.wn.synsets(lemma, pos=pos)[: self.senses]
+        if not synsets:
+            return []
+        primary_sense = synsets[0]  # what "similarity" is measured against
+
         ordered: List[str] = []
         seen: Set[str] = {lemma}
         for synset in synsets:
+            if synset is not primary_sense and not self._sense_passes(synset, primary_sense):
+                continue  # this whole sense drifted too far from the dominant one
             scored = []
             for wn_lemma in synset.lemmas():
                 name = wn_lemma.name()
@@ -113,6 +128,20 @@ class SynonymFinder:
                 scored.append((-wn_lemma.count(), normalized))
             ordered.extend(name for _, name in sorted(scored))
         return ordered
+
+    def _sense_passes(self, synset, primary_sense) -> bool:
+        """Is `synset` at least `threshold` similar to the word's primary sense?
+
+        Wu-Palmer similarity is WordNet's standard 0-1 relatedness score,
+        based on how close the two senses' nearest shared ancestor is in the
+        hypernym tree; 1.0 means the same sense, lower means more distantly
+        related. A pair with no comparable path (`None`) is treated as
+        unrelated and rejected, same as a low score.
+        """
+        if self.threshold <= 0:
+            return True  # filtering disabled
+        similarity = synset.wup_similarity(primary_sense)
+        return similarity is not None and similarity >= self.threshold
 
     def _inflect(self, lemma: str, pos: str, form: str) -> Optional[str]:
         """Reproduce `form` for `lemma`, or None if only an irregular would do."""

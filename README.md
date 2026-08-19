@@ -22,7 +22,7 @@ The WordNet data (~10 MB) downloads itself on the first run.
 ## Usage
 
 ```
-synreplace [-n N] [--slide] [--senses K] [--multiword] [-v]
+synreplace [-n N] [--slide] [--senses K] [--threshold T] [--multiword] [-v]
            [-c | -i FILE | -o FILE | TEXT]
 ```
 
@@ -43,6 +43,7 @@ Input is taken from the first of these that applies:
 | `-n, --every N` | Replace every N-th word (default `5`) |
 | `--slide` | If the N-th word has no synonym, try the next word instead (recommended) |
 | `--senses K` | Consider the K closest senses of the word, not just the closest (default `1`) |
+| `--threshold T` | Minimum sense similarity (`0`-`1`) a `--senses` candidate must clear (default `0.95`); `0` disables the check — see below |
 | `--multiword` | Allow multi-word synonyms such as "give up" |
 | `-v, --verbose` | List every substitution on stderr |
 | `-c, --clip` | Read from and write back to the clipboard |
@@ -67,6 +68,34 @@ a miss moves the search to the next word, keeping the rate close to 1-in-N
 
 Nothing else in the text moves: whitespace, newlines, punctuation and numbers
 come out byte-identical.
+
+## `--threshold`: how far a synonym is allowed to drift
+
+`--senses K` (K > 1) lets a word borrow synonyms from its 2nd, 3rd, ... most
+common sense, not just its dominant one — useful for variety, but those senses
+can be barely related to what the word actually means in context (`fox` in its
+dominant sense is the animal; a rarer sense is "a person who dodges/evades",
+giving `dodger`).
+
+`--threshold` guards against that: each candidate sense is scored against the
+word's *dominant* sense using WordNet's Wu-Palmer similarity (0-1, based on
+how close their nearest common ancestor is in the meaning hierarchy), and any
+sense scoring below the threshold is dropped — the word falls through to
+skip/slide like it had no synonym at all, the same as any other unusable word.
+
+```
+$ synreplace -n 1 --slide --senses 3 --threshold 0 -v "the quick brown fox jumps over the lazy dog"
+  quick -> speedy, fox -> dodger, jumps -> leaps, lazy -> indolent, dog -> frump
+5 substitutions
+
+$ synreplace -n 1 --slide --senses 3 --threshold 0.95 -v "the quick brown fox jumps over the lazy dog"
+  quick -> speedy, jumps -> leaps
+2 substitutions   # fox, lazy and dog are left alone; their weird candidates score ~0.5
+```
+
+A word's dominant sense is always 100% similar to itself, so **the default
+`--threshold 0.95` has no effect at the default `--senses 1`** — it only starts
+rejecting candidates once `--senses` is raised above `1`.
 
 ## What is deliberately left alone
 
