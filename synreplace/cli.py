@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+from pathlib import Path
 
 from . import __version__
 from .clipboard import ClipboardError, copy, paste
@@ -13,12 +14,22 @@ input is taken from, in order of precedence:
   --clip, --input FILE, a TEXT argument, piped stdin, or an interactive
   paste prompt (finish with Ctrl-D, or Ctrl-Z then Enter on Windows)
 
+--input FILE without --output writes to FILE-modified next to FILE, rather
+than to stdout.
+
 examples:
   synreplace -n 3 "the quick brown fox jumps over the lazy dog"
   cat draft.md | synreplace -n 5 > rewritten.md
-  synreplace -i draft.txt -o rewritten.txt -v
+  synreplace -i draft.txt -v          # writes draft-modified.txt
+  synreplace -i draft.txt -o out.txt -v
   synreplace --clip -n 4
 """
+
+
+def default_output_path(input_path: str) -> str:
+    """FILE -> FILE-modified next to it, e.g. draft.txt -> draft-modified.txt."""
+    path = Path(input_path)
+    return str(path.with_name(path.stem + "-modified" + path.suffix))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,7 +45,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="replace every N-th word (default: 5)",
     )
     parser.add_argument("-i", "--input", metavar="FILE", help="read text from FILE")
-    parser.add_argument("-o", "--output", metavar="FILE", help="write result to FILE")
+    parser.add_argument(
+        "-o", "--output", metavar="FILE",
+        help="write result to FILE (default with --input: FILE-modified)",
+    )
     parser.add_argument(
         "-c", "--clip", action="store_true",
         help="read from and write back to the system clipboard",
@@ -100,6 +114,11 @@ def main(argv=None) -> int:
     if args.every < 1:
         print("synreplace: -n/--every must be 1 or greater", file=sys.stderr)
         return 2
+
+    # Modifying a real file (not stdin, not the clipboard) writes a sibling
+    # file rather than dumping to stdout, unless the caller named -o explicitly.
+    if args.input and args.input != "-" and not args.output and not args.clip:
+        args.output = default_output_path(args.input)
 
     try:
         text = read_input(args)

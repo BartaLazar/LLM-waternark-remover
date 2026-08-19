@@ -31,7 +31,7 @@ Input is taken from the first of these that applies:
 | Source | How |
 | --- | --- |
 | Clipboard | `synreplace --clip -n 4` — reads the clipboard, writes the result back to it |
-| File | `synreplace -i draft.txt -o rewritten.txt` |
+| File | `synreplace -i draft.txt` — writes `draft-modified.txt` next to it, or `-o FILE` to name it yourself |
 | Argument | `synreplace -n 3 "some text here"` |
 | Pipe | `cat draft.md \| synreplace -n 5 > out.md` |
 | Interactive | run it bare, paste, then press `Ctrl-D` |
@@ -46,7 +46,7 @@ Input is taken from the first of these that applies:
 | `--multiword` | Allow multi-word synonyms such as "give up" |
 | `-v, --verbose` | List every substitution on stderr |
 | `-c, --clip` | Read from and write back to the clipboard |
-| `-i, --input` / `-o, --output` | Read from / write to a file |
+| `-i, --input` / `-o, --output` | Read from / write to a file. With `-i` alone, output goes to `<name>-modified.<ext>` next to the input file |
 
 Without `--slide`, a missed word is just skipped — substitutions land only on
 exact multiples of N, so the count is often well under 1-in-N. With `--slide`,

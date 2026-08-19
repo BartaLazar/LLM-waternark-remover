@@ -162,6 +162,44 @@ class TestCli(unittest.TestCase):
         self.assertTrue(out.getvalue().strip())
         self.assertNotEqual(out.getvalue().strip(), SAMPLE)
 
+    def test_input_file_defaults_to_modified_sibling(self):
+        import os
+        import tempfile
+
+        from synreplace.cli import main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_path = os.path.join(tmp, "draft.txt")
+            with open(input_path, "w", encoding="utf-8") as handle:
+                handle.write(SAMPLE)
+
+            code = main(["-i", input_path, "-n", "3", "--slide"])
+
+            expected_path = os.path.join(tmp, "draft-modified.txt")
+            self.assertEqual(code, 0)
+            self.assertTrue(os.path.exists(expected_path))
+            with open(expected_path, encoding="utf-8") as handle:
+                written = handle.read()
+            self.assertNotEqual(written, SAMPLE)
+
+    def test_explicit_output_overrides_default_name(self):
+        import os
+        import tempfile
+
+        from synreplace.cli import main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_path = os.path.join(tmp, "draft.txt")
+            output_path = os.path.join(tmp, "custom.txt")
+            with open(input_path, "w", encoding="utf-8") as handle:
+                handle.write(SAMPLE)
+
+            code = main(["-i", input_path, "-o", output_path, "-n", "3", "--slide"])
+
+            self.assertEqual(code, 0)
+            self.assertTrue(os.path.exists(output_path))
+            self.assertFalse(os.path.exists(os.path.join(tmp, "draft-modified.txt")))
+
     def test_empty_input_reports_error(self):
         import io
         from contextlib import redirect_stderr
