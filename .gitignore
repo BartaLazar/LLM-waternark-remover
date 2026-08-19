@@ -8,3 +8,5 @@ dist/
 .pytest_cache/
 nltk_data/
 .DS_Store
+.claude/
+work_text_files/
