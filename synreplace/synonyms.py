@@ -69,8 +69,13 @@ class SynonymFinder:
             self._wn = wordnet
         return self._wn
 
-    def find(self, word: str, tag: str) -> Optional[str]:
-        """Best synonym for `word` in the same grammatical form, or None."""
+    def find(self, word: str, tag: str) -> Optional[Tuple[str, float]]:
+        """Best (synonym, similarity) for `word` in the same form, or None.
+
+        `similarity` is the candidate's Wu-Palmer score against the word's
+        dominant sense -- see `_candidates`. It is always `1.0` unless
+        `senses > 1` pulled the winning candidate from a less common sense.
+        """
         mapping = TAG_MAP.get(tag)
         if mapping is None:
             return None  # part of speech we never touch
@@ -89,14 +94,22 @@ class SynonymFinder:
 
         # Walk candidates best-first and take the first one we can inflect
         # correctly; a candidate that only differs by inflection is no change.
-        for candidate in self._candidates(lemma, pos):
+        for candidate, similarity in self._candidates(lemma, pos):
             inflected = self._inflect(candidate, pos, form)
             if inflected is not None and inflected != lowered:
-                return inflected
+                return inflected, similarity
         return None
 
-    def _candidates(self, lemma: str, pos: str) -> List[str]:
-        """Candidate lemmas, nearest sense first, most frequent first."""
+    def _candidates(self, lemma: str, pos: str) -> List[Tuple[str, float]]:
+        """(lemma, similarity) candidates, nearest sense first, most frequent first.
+
+        `similarity` is each candidate's Wu-Palmer score (WordNet's standard
+        0-1 relatedness measure, based on how close two senses' nearest shared
+        ancestor is in the meaning hierarchy) against the word's own dominant
+        sense. The dominant sense is always `1.0` similar to itself; senses
+        with no comparable path score `0.0`. Below `threshold`, a sense is
+        dropped entirely rather than reported with a low score.
+        """
         # WordNet returns synsets ordered by how common the sense is, so
         # slicing to `senses` keeps us near the word's dominant meaning.
         synsets = self.wn.synsets(lemma, pos=pos)[: self.senses]
@@ -104,11 +117,15 @@ class SynonymFinder:
             return []
         primary_sense = synsets[0]  # what "similarity" is measured against
 
-        ordered: List[str] = []
+        ordered: List[Tuple[str, float]] = []
         seen: Set[str] = {lemma}
         for synset in synsets:
-            if synset is not primary_sense and not self._sense_passes(synset, primary_sense):
-                continue  # this whole sense drifted too far from the dominant one
+            if synset is primary_sense:
+                similarity = 1.0
+            else:
+                similarity = synset.wup_similarity(primary_sense) or 0.0
+                if self.threshold > 0 and similarity < self.threshold:
+                    continue  # this whole sense drifted too far from the dominant one
             scored = []
             for wn_lemma in synset.lemmas():
                 name = wn_lemma.name()
@@ -126,22 +143,8 @@ class SynonymFinder:
                 # Negative count sorts the most frequent lemma first; the name
                 # breaks ties so the same input always gives the same output.
                 scored.append((-wn_lemma.count(), normalized))
-            ordered.extend(name for _, name in sorted(scored))
+            ordered.extend((name, similarity) for _, name in sorted(scored))
         return ordered
-
-    def _sense_passes(self, synset, primary_sense) -> bool:
-        """Is `synset` at least `threshold` similar to the word's primary sense?
-
-        Wu-Palmer similarity is WordNet's standard 0-1 relatedness score,
-        based on how close the two senses' nearest shared ancestor is in the
-        hypernym tree; 1.0 means the same sense, lower means more distantly
-        related. A pair with no comparable path (`None`) is treated as
-        unrelated and rejected, same as a low score.
-        """
-        if self.threshold <= 0:
-            return True  # filtering disabled
-        similarity = synset.wup_similarity(primary_sense)
-        return similarity is not None and similarity >= self.threshold
 
     def _inflect(self, lemma: str, pos: str, form: str) -> Optional[str]:
         """Reproduce `form` for `lemma`, or None if only an irregular would do."""

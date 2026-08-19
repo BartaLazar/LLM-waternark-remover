@@ -45,7 +45,7 @@ Input is taken from the first of these that applies:
 | `--senses K` | Consider the K closest senses of the word, not just the closest (default `1`) |
 | `--threshold T` | Minimum sense similarity (`0`-`1`) a `--senses` candidate must clear (default `0.95`); `0` disables the check — see below |
 | `--multiword` | Allow multi-word synonyms such as "give up" |
-| `-v, --verbose` | List every substitution on stderr |
+| `-v, --verbose` | List every substitution on stderr, with its sense similarity |
 | `-c, --clip` | Read from and write back to the clipboard |
 | `-i, --input` / `-o, --output` | Read from / write to a file. With `-i` alone, output goes to `<name>-modified.<ext>` next to the input file |
 
@@ -67,7 +67,13 @@ a miss moves the search to the next word, keeping the rate close to 1-in-N
    `expressed` → `evinced`, `Researchers` → `Investigators`.
 
 Nothing else in the text moves: whitespace, newlines, punctuation and numbers
-come out byte-identical.
+come out byte-identical. `-v` prints each substitution's sense similarity
+against the word's dominant meaning (see `--threshold` below) — always 100%
+at the default `--senses 1`:
+
+```
+  #12 researchers -> investigators (100% similar)
+```
 
 ## `--threshold`: how far a synonym is allowed to drift
 
@@ -85,12 +91,17 @@ skip/slide like it had no synonym at all, the same as any other unusable word.
 
 ```
 $ synreplace -n 1 --slide --senses 3 --threshold 0 -v "the quick brown fox jumps over the lazy dog"
-  quick -> speedy, fox -> dodger, jumps -> leaps, lazy -> indolent, dog -> frump
+  #2 quick -> speedy (100% similar)
+  #4 fox -> dodger (48% similar)
+  #5 jumps -> leaps (100% similar)
+  #8 lazy -> indolent (50% similar)
+  #9 dog -> frump (60% similar)
 5 substitutions
 
 $ synreplace -n 1 --slide --senses 3 --threshold 0.95 -v "the quick brown fox jumps over the lazy dog"
-  quick -> speedy, jumps -> leaps
-2 substitutions   # fox, lazy and dog are left alone; their weird candidates score ~0.5
+  #2 quick -> speedy (100% similar)
+  #5 jumps -> leaps (100% similar)
+2 substitutions   # fox, lazy and dog are left alone — their only candidates scored below 95%
 ```
 
 A word's dominant sense is always 100% similar to itself, so **the default

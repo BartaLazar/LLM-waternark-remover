@@ -13,6 +13,7 @@ class Replacement:
     position: int  # 1-based index among words, counting every word in the text
     original: str
     replacement: str
+    similarity: float  # Wu-Palmer score against the word's dominant sense; see SynonymFinder
 
 
 def rewrite(
@@ -55,15 +56,16 @@ def rewrite(
         if ordinal < next_target:
             continue
         original = tokens[token_index].text
-        synonym = finder.find(original, tags[ordinal - 1][1])
-        if synonym is None:
+        found = finder.find(original, tags[ordinal - 1][1])
+        if found is None:
             # Hold the slot open for the next word, or skip to the next
             # multiple of N and accept a missed substitution.
             if not slide:
                 next_target = ordinal + every
             continue
+        synonym, similarity = found
         tokens[token_index].text = match_case(original, synonym)
-        replacements.append(Replacement(ordinal, original, tokens[token_index].text))
+        replacements.append(Replacement(ordinal, original, tokens[token_index].text, similarity))
         # Measure the next interval from where we actually landed, so sliding
         # never bunches two substitutions closer than N words apart.
         next_target = ordinal + every

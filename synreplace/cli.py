@@ -175,8 +175,11 @@ def main(argv=None) -> int:
 
     if args.verbose:
         for item in replacements:
-            print("  #%d %s -> %s" % (item.position, item.original, item.replacement),
-                  file=sys.stderr)
+            print(
+                "  #%d %s -> %s (%.0f%% similar)"
+                % (item.position, item.original, item.replacement, item.similarity * 100),
+                file=sys.stderr,
+            )
         print("%d substitution%s" % (len(replacements), "" if len(replacements) == 1 else "s"),
               file=sys.stderr)
     return 0

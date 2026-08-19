@@ -88,8 +88,8 @@ class TestSynonymFinder(unittest.TestCase):
         self.assertEqual(self.finder._inflect("dog", "n", "s"), "dogs")
 
     def test_returns_a_different_word_in_the_same_form(self):
-        self.assertEqual(self.finder.find("researchers", "NNS"), "investigators")
-        self.assertEqual(self.finder.find("difficult", "JJ"), "hard")
+        self.assertEqual(self.finder.find("researchers", "NNS"), ("investigators", 1.0))
+        self.assertEqual(self.finder.find("difficult", "JJ"), ("hard", 1.0))
 
     def test_default_threshold_is_a_no_op_at_senses_1(self):
         # A word's primary sense is always 100% similar to itself, so the
@@ -97,7 +97,10 @@ class TestSynonymFinder(unittest.TestCase):
         strict = SynonymFinder(senses=1, threshold=0.95)
         permissive = SynonymFinder(senses=1, threshold=0.0)
         for word, tag in [("researchers", "NNS"), ("difficult", "JJ"), ("fox", "NN")]:
-            self.assertEqual(strict.find(word, tag), permissive.find(word, tag), word)
+            result = strict.find(word, tag)
+            self.assertEqual(result, permissive.find(word, tag), word)
+            if result is not None:
+                self.assertEqual(result[1], 1.0, word)
 
     def test_high_threshold_rejects_a_distant_sense(self):
         # "fox" (dodger.n.01, wup~0.48) and "lazy" (faineant.s.01, wup~0.5)
@@ -105,14 +108,21 @@ class TestSynonymFinder(unittest.TestCase):
         # related sense reachable via --senses.
         loose = SynonymFinder(senses=3, threshold=0.0)
         strict = SynonymFinder(senses=3, threshold=0.95)
-        self.assertEqual(loose.find("fox", "NN"), "dodger")
+        fox_word, fox_similarity = loose.find("fox", "NN")
+        self.assertEqual(fox_word, "dodger")
+        self.assertLess(fox_similarity, 0.95)
         self.assertIsNone(strict.find("fox", "NN"))
-        self.assertEqual(loose.find("lazy", "JJ"), "indolent")
+        lazy_word, lazy_similarity = loose.find("lazy", "JJ")
+        self.assertEqual(lazy_word, "indolent")
+        self.assertLess(lazy_similarity, 0.95)
         self.assertIsNone(strict.find("lazy", "JJ"))
 
     def test_threshold_is_ignored_when_disabled(self):
         finder = SynonymFinder(senses=3, threshold=0)
-        self.assertEqual(finder.find("fox", "NN"), "dodger")
+        word, similarity = finder.find("fox", "NN")
+        self.assertEqual(word, "dodger")
+        self.assertGreater(similarity, 0.0)
+        self.assertLess(similarity, 1.0)
 
 
 class TestRewrite(unittest.TestCase):
@@ -195,6 +205,18 @@ class TestCli(unittest.TestCase):
         self.assertIn("substitution", err.getvalue())
         self.assertTrue(out.getvalue().strip())
         self.assertNotEqual(out.getvalue().strip(), SAMPLE)
+
+    def test_verbose_output_includes_similarity(self):
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+
+        from synreplace.cli import main
+
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = main(["-n", "3", "--slide", "-v", SAMPLE])
+        self.assertEqual(code, 0)
+        self.assertRegex(err.getvalue(), r"-> \w+ \(\d+% similar\)")
 
     def test_clipboard_source_is_also_printed(self):
         import io
