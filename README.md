@@ -60,9 +60,12 @@ a miss moves the search to the next word, keeping the rate close to 1-in-N
    the verb are treated differently.
 2. The word is reduced to its lemma (`researchers` → `researcher`).
 3. WordNet orders a word's senses by how common they are. `--senses 1` uses only
-   the most common one, which is what keeps replacements on-meaning.
-4. Within that sense, the synonym with the highest corpus frequency wins. Ties
-   break alphabetically, so the tool is fully deterministic.
+   the most common one, which is what keeps replacements on-meaning; `--senses K`
+   also considers the next `K-1` senses, subject to `--threshold`.
+4. Among every candidate gathered across those senses, the one with the
+   *highest similarity* to the word's single most common sense wins — not
+   whichever sense happens to be listed first. Ties break by corpus frequency,
+   then alphabetically, so the tool is fully deterministic.
 5. The synonym is put back into the original word's form and capitalisation —
    `expressed` → `evinced`, `Researchers` → `Investigators`.
 

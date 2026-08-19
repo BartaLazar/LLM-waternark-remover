@@ -124,6 +124,16 @@ class TestSynonymFinder(unittest.TestCase):
         self.assertGreater(similarity, 0.0)
         self.assertLess(similarity, 1.0)
 
+    def test_picks_highest_similarity_across_senses_not_first_in_sense_order(self):
+        # dog's 2nd sense (frump.n.01, wup~0.60) sorts before its 4th sense
+        # (cad.n.01, wup~0.63, lemma "hound") in WordNet's own sense order --
+        # the winner should still be whichever scores higher, not whichever
+        # sense comes first.
+        finder = SynonymFinder(senses=5, threshold=0.5)
+        word, similarity = finder.find("dog", "NN")
+        self.assertEqual(word, "hound")
+        self.assertAlmostEqual(similarity, 0.631578947368421)
+
 
 class TestRewrite(unittest.TestCase):
     @classmethod
