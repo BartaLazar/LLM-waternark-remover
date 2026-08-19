@@ -41,12 +41,17 @@ Input is taken from the first of these that applies:
 | Flag | Meaning |
 | --- | --- |
 | `-n, --every N` | Replace every N-th word (default `5`) |
-| `--slide` | If the N-th word has no synonym, try the next word instead. Recommended — see below |
+| `--slide` | If the N-th word has no synonym, try the next word instead (recommended) |
 | `--senses K` | Consider the K closest senses of the word, not just the closest (default `1`) |
 | `--multiword` | Allow multi-word synonyms such as "give up" |
 | `-v, --verbose` | List every substitution on stderr |
 | `-c, --clip` | Read from and write back to the clipboard |
 | `-i, --input` / `-o, --output` | Read from / write to a file |
+
+Without `--slide`, a missed word is just skipped — substitutions land only on
+exact multiples of N, so the count is often well under 1-in-N. With `--slide`,
+a miss moves the search to the next word, keeping the rate close to 1-in-N
+(substitutions still stay at least N words apart).
 
 ## How a synonym is picked
 
@@ -77,9 +82,7 @@ The tool prefers leaving a word alone over producing a wrong one:
 - **Words WordNet has no distinct synonym for**, which is a lot of them.
 
 This is why plain `-n 3` often produces fewer substitutions than you would
-expect — many of the N-th words simply have no safe replacement. `--slide` moves
-the search to the next word when that happens and keeps the rate close to 1-in-N,
-while still never placing two substitutions closer than N words apart.
+expect. See `--slide` above for the fix.
 
 ## Quality note
 
