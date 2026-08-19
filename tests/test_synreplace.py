@@ -162,6 +162,26 @@ class TestCli(unittest.TestCase):
         self.assertTrue(out.getvalue().strip())
         self.assertNotEqual(out.getvalue().strip(), SAMPLE)
 
+    def test_clipboard_source_is_also_printed(self):
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+        from unittest.mock import patch
+
+        from synreplace.cli import main
+
+        out, err = io.StringIO(), io.StringIO()
+        copied = {}
+        with patch("synreplace.cli.paste", return_value=SAMPLE), \
+             patch("synreplace.cli.copy", side_effect=lambda text: copied.setdefault("text", text)), \
+             redirect_stdout(out), redirect_stderr(err):
+            code = main(["--clip", "-n", "3", "--slide"])
+        self.assertEqual(code, 0)
+        # Went to the clipboard...
+        self.assertEqual(copied["text"], out.getvalue().rstrip("\n"))
+        # ...and was also echoed to stdout, since there is no other way to see it.
+        self.assertTrue(out.getvalue().strip())
+        self.assertNotEqual(out.getvalue().strip(), SAMPLE)
+
     def test_input_file_defaults_to_modified_sibling(self):
         import os
         import tempfile

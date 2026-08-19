@@ -73,40 +73,56 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def read_input(args: argparse.Namespace) -> str:
-    """Resolve the input source, most explicit first."""
+# Input sources for which the result is also echoed to stdout, on top of
+# whatever write_output() does with it -- there is no other way to see it for
+# --clip, and it is the expected instant-feedback behaviour for a TEXT arg.
+ECHOED_SOURCES = frozenset({"clip", "text"})
+
+
+def read_input(args: argparse.Namespace):
+    """Resolve the input source, most explicit first. Returns (text, source)."""
     if args.clip:
-        return paste()
+        return paste(), "clip"
     if args.input:
         if args.input == "-":
-            return sys.stdin.read()
+            return sys.stdin.read(), "stdin"
         with open(args.input, "r", encoding="utf-8") as handle:
-            return handle.read()
+            return handle.read(), "file"
     if args.text:
-        return " ".join(args.text)
+        return " ".join(args.text), "text"
     # Not a terminal means something is piped in, so read it without prompting.
     if not sys.stdin.isatty():
-        return sys.stdin.read()
+        return sys.stdin.read(), "stdin"
     print("Paste your text, then press Ctrl-D to rewrite it:", file=sys.stderr)
-    return sys.stdin.read()
+    return sys.stdin.read(), "interactive"
 
 
-def write_output(args: argparse.Namespace, text: str) -> None:
-    """Send the result where the flags say. Status messages go to stderr so
-    that stdout stays clean for piping."""
-    if args.clip:
-        copy(text)
-        print("Rewritten text copied to clipboard.", file=sys.stderr)
-        return
-    if args.output:
-        with open(args.output, "w", encoding="utf-8") as handle:
-            handle.write(text)
-        print("Wrote %s" % args.output, file=sys.stderr)
-        return
+def _print_to_stdout(text: str) -> None:
     sys.stdout.write(text)
     # Keep the shell prompt on its own line without altering file/clipboard output.
     if text and not text.endswith("\n"):
         sys.stdout.write("\n")
+
+
+def write_output(args: argparse.Namespace, text: str, source: str) -> None:
+    """Send the result where the flags say. Status messages go to stderr so
+    that stdout stays clean for piping."""
+    printed = False
+    if args.clip:
+        copy(text)
+        print("Rewritten text copied to clipboard.", file=sys.stderr)
+    elif args.output:
+        with open(args.output, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        print("Wrote %s" % args.output, file=sys.stderr)
+    else:
+        _print_to_stdout(text)
+        printed = True
+
+    # Clipboard and directly-typed text have no other way to show the result,
+    # so echo it to stdout even when it already went to the clipboard or a file.
+    if not printed and source in ECHOED_SOURCES:
+        _print_to_stdout(text)
 
 
 def main(argv=None) -> int:
@@ -121,7 +137,7 @@ def main(argv=None) -> int:
         args.output = default_output_path(args.input)
 
     try:
-        text = read_input(args)
+        text, source = read_input(args)
     except (OSError, ClipboardError) as error:
         print("synreplace: %s" % error, file=sys.stderr)
         return 1
@@ -141,7 +157,7 @@ def main(argv=None) -> int:
     )
 
     try:
-        write_output(args, result)
+        write_output(args, result, source)
     except (OSError, ClipboardError) as error:
         print("synreplace: %s" % error, file=sys.stderr)
         return 1

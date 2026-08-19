@@ -30,9 +30,9 @@ Input is taken from the first of these that applies:
 
 | Source | How |
 | --- | --- |
-| Clipboard | `synreplace --clip -n 4` — reads the clipboard, writes the result back to it |
+| Clipboard | `synreplace --clip -n 4` — reads the clipboard, writes the result back to it and prints it |
 | File | `synreplace -i draft.txt` — writes `draft-modified.txt` next to it, or `-o FILE` to name it yourself |
-| Argument | `synreplace -n 3 "some text here"` |
+| Argument | `synreplace -n 3 "some text here"` — printed to stdout |
 | Pipe | `cat draft.md \| synreplace -n 5 > out.md` |
 | Interactive | run it bare, paste, then press `Ctrl-D` |
 
