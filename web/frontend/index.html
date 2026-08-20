@@ -7,18 +7,39 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <div class="glow glow-a" aria-hidden="true"></div>
+  <div class="glow glow-b" aria-hidden="true"></div>
+
   <header>
-    <h1>synreplace</h1>
-    <p class="subtitle">Replace every N-th word with its closest WordNet synonym.</p>
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M7 7h11l-3-3M17 17H6l3 3" />
+        </svg>
+      </span>
+      <div>
+        <h1>synreplace</h1>
+        <p class="subtitle">Replace every N-th word with its closest WordNet synonym.</p>
+      </div>
+    </div>
   </header>
 
   <main>
     <section class="panel">
       <div class="text-header">
         <label for="text">Text</label>
-        <button id="sample-btn" type="button" class="secondary">Paste sample text (500 words)</button>
+        <button id="sample-btn" type="button" class="secondary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" class="icon">
+            <path d="M9 2h6l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z" />
+            <path d="M9 13h6M9 17h6M9 9h1" />
+          </svg>
+          Paste sample text (500 words)
+        </button>
       </div>
       <textarea id="text" rows="10" placeholder="Paste or type your text here&hellip;"></textarea>
+      <div class="word-count" id="word-count">0 words</div>
 
       <div class="controls">
         <div class="field">
@@ -29,30 +50,61 @@
           <label for="senses">Senses (K)</label>
           <input type="number" id="senses" min="1" value="1" />
         </div>
-        <div class="field">
-          <label for="threshold">Threshold</label>
-          <input type="number" id="threshold" min="0" max="1" step="0.01" value="0.95" />
+        <div class="field field-wide">
+          <label for="threshold">Threshold <span id="threshold-value" class="value-badge">0.95</span></label>
+          <input type="range" id="threshold" min="0" max="1" step="0.01" value="0.95" />
         </div>
-        <div class="field checkbox">
-          <label><input type="checkbox" id="slide" /> Slide</label>
+        <div class="field switch-field">
+          <label class="switch">
+            <input type="checkbox" id="slide" />
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-label">Slide</span>
+          </label>
         </div>
-        <div class="field checkbox">
-          <label><input type="checkbox" id="allow_multiword" /> Allow multi-word</label>
+        <div class="field switch-field">
+          <label class="switch">
+            <input type="checkbox" id="allow_multiword" />
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-label">Allow multi-word</span>
+          </label>
         </div>
       </div>
 
       <div class="actions">
-        <button id="rewrite-btn" type="button">Rewrite</button>
+        <button id="rewrite-btn" type="button" class="primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" class="icon spinner" id="rewrite-spinner" hidden>
+            <path d="M21 12a9 9 0 1 1-9-9" />
+          </svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" class="icon" id="rewrite-icon">
+            <path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.3 5.6L21 11l-5.7 2.4L13 19l-2.3-5.6L5 11l5.7-2.4Z" />
+          </svg>
+          <span>Rewrite</span>
+        </button>
         <span id="status" role="status" aria-live="polite"></span>
       </div>
     </section>
 
-    <section class="panel" id="result-panel" hidden>
+    <section class="panel result-panel" id="result-panel" hidden>
       <div class="result-header">
         <label for="result">Result</label>
         <div class="result-actions">
-          <button id="copy-btn" type="button">Copy</button>
-          <button id="download-btn" type="button">Download .txt</button>
+          <button id="copy-btn" type="button" class="secondary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" class="icon">
+              <rect x="9" y="9" width="12" height="12" rx="2" />
+              <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+            </svg>
+            Copy
+          </button>
+          <button id="download-btn" type="button" class="secondary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" class="icon">
+              <path d="M12 3v12m0 0-4-4m4 4 4-4M4 19h16" />
+            </svg>
+            Download .txt
+          </button>
         </div>
       </div>
       <textarea id="result" rows="10" readonly></textarea>
@@ -69,6 +121,11 @@
     </section>
 
     <section class="panel error" id="error-panel" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" class="icon">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 8v5M12 16h.01" />
+      </svg>
       <p id="error-message"></p>
     </section>
   </main>
