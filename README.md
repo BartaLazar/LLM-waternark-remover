@@ -141,3 +141,10 @@ the output before using it; `-v` shows you exactly what changed.
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+## Web interface
+
+A browser UI and REST API also exist, in [`web/`](web/) — a separate,
+self-contained folder with its own setup and its own server, independent of
+this CLI. See [`web/README.md`](web/README.md) to run it, and
+[`web/docs/API.md`](web/docs/API.md) for the REST API reference.

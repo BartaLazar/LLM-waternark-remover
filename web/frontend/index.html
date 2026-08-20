@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>synreplace</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>synreplace</h1>
+    <p class="subtitle">Replace every N-th word with its closest WordNet synonym.</p>
+  </header>
+
+  <main>
+    <section class="panel">
+      <label for="text">Text</label>
+      <textarea id="text" rows="10" placeholder="Paste or type your text here&hellip;"></textarea>
+
+      <div class="controls">
+        <div class="field">
+          <label for="every">Every N-th word</label>
+          <input type="number" id="every" min="1" value="5" />
+        </div>
+        <div class="field">
+          <label for="senses">Senses (K)</label>
+          <input type="number" id="senses" min="1" value="1" />
+        </div>
+        <div class="field">
+          <label for="threshold">Threshold</label>
+          <input type="number" id="threshold" min="0" max="1" step="0.01" value="0.95" />
+        </div>
+        <div class="field checkbox">
+          <label><input type="checkbox" id="slide" /> Slide</label>
+        </div>
+        <div class="field checkbox">
+          <label><input type="checkbox" id="allow_multiword" /> Allow multi-word</label>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="rewrite-btn" type="button">Rewrite</button>
+        <span id="status" role="status" aria-live="polite"></span>
+      </div>
+    </section>
+
+    <section class="panel" id="result-panel" hidden>
+      <div class="result-header">
+        <label for="result">Result</label>
+        <div class="result-actions">
+          <button id="copy-btn" type="button">Copy</button>
+          <button id="download-btn" type="button">Download .txt</button>
+        </div>
+      </div>
+      <textarea id="result" rows="10" readonly></textarea>
+
+      <h2 id="substitutions-heading"></h2>
+      <div class="table-wrap">
+        <table id="substitutions">
+          <thead>
+            <tr><th>#</th><th>Original</th><th>Replacement</th><th>Similarity</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel error" id="error-panel" hidden>
+      <p id="error-message"></p>
+    </section>
+  </main>
+
+  <footer>
+    <p>Backed by a local REST API &mdash; see <code>web/docs/API.md</code> for the endpoint reference.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
