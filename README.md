@@ -22,6 +22,12 @@ CMU Pronouncing Dictionary (used for accurate consonant-doubling like "occur"
 → "occurring"; optional -- inflection just falls back to a cruder heuristic
 if it can't be fetched).
 
+Also want the [web interface](web/)? Same venv, one more command:
+
+```bash
+pip install -r requirements.txt
+```
+
 ## Usage
 
 ```

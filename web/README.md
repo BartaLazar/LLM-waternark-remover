@@ -1,9 +1,12 @@
 # synreplace web interface
 
-A browser UI and REST API for `synreplace`, kept in this folder so it runs
-independently of the CLI — nothing here is required to use `synreplace` from
-the command line, and nothing in `synreplace/` is required to run this beyond
-the library itself.
+A browser UI and REST API for `synreplace`, kept in this folder so its code
+runs independently of the CLI — this is a separate app that happens to reuse
+the same `synreplace` engine, not a dependency of the CLI itself.
+
+It shares the **one virtual environment at the repo root** with the CLI
+(see the top-level [`README.md`](../README.md)) rather than keeping its own —
+one `.venv`, one `requirements.txt`, for the whole project.
 
 - **Backend**: FastAPI, in `backend/`. Wraps the same `synreplace` engine the
   CLI uses (`synreplace.rewrite()`) behind a REST API, and serves the static
@@ -16,22 +19,24 @@ the library itself.
 
 ## Setup
 
-The backend needs the `synreplace` package installed (editable, so it always
-reflects the current checkout) alongside its own dependencies:
+From the **repo root** (not this folder) — one venv covers the CLI and the
+web interface:
 
 ```bash
-cd web/backend
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
-pip install -e ../..        # installs the synreplace CLI package itself
+pip install -e .                # the synreplace CLI package itself
+pip install -r requirements.txt # nltk + the web interface's fastapi/uvicorn/pydantic
 ```
+
+If you already set this up for the CLI, there's nothing extra to install —
+`requirements.txt` at the repo root covers both.
 
 ## Run
 
 ```bash
+source .venv/bin/activate       # from the repo root
 cd web/backend
-source .venv/bin/activate
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -54,11 +59,10 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 web/
 ├── backend/
-│   ├── app/
-│   │   ├── main.py       # FastAPI app: routes, CORS, startup, static mount
-│   │   ├── schemas.py    # Request/response models (also drive the OpenAPI docs)
-│   │   └── service.py    # Thin wrapper around synreplace.rewrite()
-│   └── requirements.txt
+│   └── app/
+│       ├── main.py       # FastAPI app: routes, CORS, startup, static mount
+│       ├── schemas.py    # Request/response models (also drive the OpenAPI docs)
+│       └── service.py    # Thin wrapper around synreplace.rewrite()
 ├── frontend/
 │   ├── index.html
 │   ├── style.css
@@ -67,3 +71,6 @@ web/
 │   └── API.md             # Full API reference
 └── README.md               # This file
 ```
+
+(No `requirements.txt` here — dependencies live in the repo root's, shared
+with the CLI.)
