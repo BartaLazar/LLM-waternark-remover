@@ -1,1 +1,6 @@
 nltk>=3.8
+
+# Web interface (web/) -- optional, only needed to run the FastAPI server
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.5
