@@ -112,7 +112,7 @@ async function rewrite() {
     text: text,
     every: Number(els.every.value) || 5,
     slide: els.slide.checked,
-    senses: Number(els.senses.value) || 1,
+    senses: Number(els.senses.value) || 3,
     threshold: Number(els.threshold.value),
     allow_multiword: els.allowMultiword.checked,
   };

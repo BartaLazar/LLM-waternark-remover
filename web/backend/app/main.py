@@ -19,7 +19,7 @@ from . import schemas, service
 
 API_VERSION = "v1"
 
-DEFAULTS = schemas.Defaults(every=5, slide=False, senses=1, threshold=0.95, allow_multiword=False)
+DEFAULTS = schemas.Defaults(every=5, slide=False, senses=3, threshold=0.95, allow_multiword=False)
 
 
 @asynccontextmanager

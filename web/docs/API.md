@@ -84,7 +84,7 @@ hardcoding defaults that could drift from the server's.
   "defaults": {
     "every": 5,
     "slide": false,
-    "senses": 1,
+    "senses": 3,
     "threshold": 0.95,
     "allow_multiword": false
   }
@@ -113,20 +113,17 @@ byte-identical output to the CLI.
 | `text` | string | yes | — | non-empty after trimming whitespace | The text to rewrite. |
 | `every` | integer | no | `5` | `>= 1` | Replace every N-th word. |
 | `slide` | boolean | no | `false` | — | If the N-th word has no usable synonym, try the next word instead of leaving that slot unfilled. Keeps the substitution rate close to 1-in-N; without it, substitutions land only on exact multiples of N and misses are common. |
-| `senses` | integer | no | `1` | `>= 1` | Consider the K closest WordNet senses of a word, not just its single most common one. `1` never looks past the dominant sense. |
-| `threshold` | number | no | `0.95` | `0.0`–`1.0` | Minimum Wu-Palmer similarity a non-dominant sense must have to the word's dominant sense to be used as a candidate; `0` disables the check. **Only has any effect when `senses > 1`** — at `senses=1` a word's only sense is trivially 100% similar to itself, so every candidate already clears any threshold. |
+| `senses` | integer | no | `3` | `>= 1` | Consider the K closest WordNet senses of a word, not just its single most common one. `1` never looks past the dominant sense. |
+| `threshold` | number | no | `0.95` | `0.0`–`1.0` | Minimum Wu-Palmer similarity a non-dominant sense must have to the word's dominant sense to be used as a candidate; `0` disables the check. **Only has any effect when `senses > 1`**, which is the default — at `senses=1` a word's only sense is trivially 100% similar to itself, so every candidate already clears any threshold. |
 | `allow_multiword` | boolean | no | `false` | — | Allow multi-word synonyms such as `"give up"`. |
 
-Example:
+Example (omitted fields use their defaults, shown in [`/info`](#get-apiv1info) above):
 
 ```json
 {
   "text": "The quick brown fox jumps over the lazy dog.",
   "every": 3,
-  "slide": true,
-  "senses": 1,
-  "threshold": 0.95,
-  "allow_multiword": false
+  "slide": true
 }
 ```
 
