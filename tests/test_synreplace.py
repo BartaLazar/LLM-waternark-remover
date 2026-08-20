@@ -31,6 +31,12 @@ class TestTokens(unittest.TestCase):
 
 
 class TestInflect(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # add_ing/add_ed consult cmudict for stress-aware consonant doubling;
+        # make sure it's there before the tests that depend on it run.
+        ensure_corpora(quiet=True)
+
     def test_add_s(self):
         cases = {
             "dog": "dogs", "box": "boxes", "watch": "watches", "bush": "bushes",
@@ -47,10 +53,49 @@ class TestInflect(unittest.TestCase):
         for word, expected in cases.items():
             self.assertEqual(add_ing(word), expected, word)
 
+    def test_add_ing_doubles_a_stressed_final_syllable(self):
+        # Multi-syllable verbs stressed on their last syllable double it too,
+        # not just single-syllable ones ("stop" -> "stopping").
+        cases = {
+            "occur": "occurring", "prefer": "preferring", "begin": "beginning",
+            "admit": "admitting", "permit": "permitting", "refer": "referring",
+            "control": "controlling", "regret": "regretting",
+        }
+        for word, expected in cases.items():
+            self.assertEqual(add_ing(word), expected, word)
+
+    def test_add_ing_does_not_double_an_unstressed_final_syllable(self):
+        # These end in the same CVC shape but are stressed earlier, so they
+        # must not double ("open" -> "opening", not "openning").
+        cases = {
+            "open": "opening", "listen": "listening", "happen": "happening",
+            "benefit": "benefiting", "offer": "offering", "enter": "entering",
+            "travel": "traveling",
+        }
+        for word, expected in cases.items():
+            self.assertEqual(add_ing(word), expected, word)
+
     def test_add_ed(self):
         cases = {
             "walk": "walked", "like": "liked", "stop": "stopped",
             "carry": "carried", "play": "played", "visit": "visited",
+        }
+        for word, expected in cases.items():
+            self.assertEqual(add_ed(word), expected, word)
+
+    def test_add_ed_doubles_a_stressed_final_syllable(self):
+        cases = {
+            "occur": "occurred", "prefer": "preferred", "admit": "admitted",
+            "permit": "permitted", "refer": "referred", "control": "controlled",
+            "regret": "regretted",
+        }
+        for word, expected in cases.items():
+            self.assertEqual(add_ed(word), expected, word)
+
+    def test_add_ed_does_not_double_an_unstressed_final_syllable(self):
+        cases = {
+            "open": "opened", "listen": "listened", "happen": "happened",
+            "benefit": "benefited", "offer": "offered", "enter": "entered",
         }
         for word, expected in cases.items():
             self.assertEqual(add_ed(word), expected, word)

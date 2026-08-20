@@ -17,7 +17,10 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-The WordNet data (~10 MB) downloads itself on the first run.
+The WordNet data (~10 MB) downloads itself on the first run, along with the
+CMU Pronouncing Dictionary (used for accurate consonant-doubling like "occur"
+→ "occurring"; optional -- inflection just falls back to a cruder heuristic
+if it can't be fetched).
 
 ## Usage
 
