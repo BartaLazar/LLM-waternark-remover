@@ -10,3 +10,4 @@ nltk_data/
 .DS_Store
 .claude/
 work_text_files/
+tests/test_extra_cases.py
