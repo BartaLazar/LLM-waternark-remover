@@ -75,6 +75,26 @@ class TestInflect(unittest.TestCase):
         for word, expected in cases.items():
             self.assertEqual(add_ing(word), expected, word)
 
+    def test_add_ing_doubles_after_a_qu_digraph(self):
+        # "qu" is one consonant sound (/kw/), not a vowel digraph, so these
+        # are a real CVC shape and double like any other stressed CVC stem.
+        cases = {
+            "equip": "equipping", "quit": "quitting", "quiz": "quizzing",
+            "acquit": "acquitting",
+        }
+        for word, expected in cases.items():
+            self.assertEqual(add_ing(word), expected, word)
+
+    def test_add_ing_does_not_double_a_real_vowel_digraph(self):
+        # Unlike "qu", these really are two vowel sounds/a long vowel, and
+        # must not be mistaken for a "qu"-style single consonant unit.
+        cases = {
+            "rain": "raining", "wait": "waiting", "float": "floating",
+            "cheat": "cheating",
+        }
+        for word, expected in cases.items():
+            self.assertEqual(add_ing(word), expected, word)
+
     def test_add_ed(self):
         cases = {
             "walk": "walked", "like": "liked", "stop": "stopped",
@@ -96,6 +116,14 @@ class TestInflect(unittest.TestCase):
         cases = {
             "open": "opened", "listen": "listened", "happen": "happened",
             "benefit": "benefited", "offer": "offered", "enter": "entered",
+        }
+        for word, expected in cases.items():
+            self.assertEqual(add_ed(word), expected, word)
+
+    def test_add_ed_doubles_after_a_qu_digraph(self):
+        cases = {
+            "equip": "equipped", "quit": "quitted", "quiz": "quizzed",
+            "acquit": "acquitted",
         }
         for word, expected in cases.items():
             self.assertEqual(add_ed(word), expected, word)

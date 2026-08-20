@@ -66,7 +66,13 @@ def _doubles_final_consonant(word: str) -> bool:
     a, b, c = word[-3], word[-2], word[-1]
     if c in VOWELS or c in NO_DOUBLE:
         return False
-    if b not in VOWELS or a in VOWELS:
+    if b not in VOWELS:
+        return False
+    # "qu" is one consonant sound (/kw/), not a vowel digraph, even though
+    # 'u' is a vowel letter: "equip"/"quit"/"acquit" are a real CVC shape
+    # (kw-i-p, kw-i-t, kw-i-t) and double just like "stop" does.
+    is_qu_digraph = a == "u" and len(word) >= 4 and word[-4] == "q"
+    if a in VOWELS and not is_qu_digraph:
         return False
     stressed = _is_final_syllable_stressed(word)
     if stressed is not None:
