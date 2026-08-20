@@ -23,6 +23,7 @@ examples:
   synreplace -i draft.txt -v          # writes draft-modified.txt
   synreplace -i draft.txt -o out.txt -v
   synreplace --clip -n 4
+  synreplace --senses 3 --threshold 0.8 -v "the quick brown fox jumps"
 """
 
 
@@ -60,6 +61,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--senses", type=int, default=1, metavar="K",
         help="consider the K closest word senses, not just the closest (default: 1)",
+    )
+    parser.add_argument(
+        "--threshold", type=float, default=0.95, metavar="T",
+        help="minimum sense similarity (0-1) a --senses candidate must clear, "
+             "or that word is skipped/slid past (default: 0.95; only matters "
+             "with --senses > 1; 0 disables the check)",
     )
     parser.add_argument(
         "--multiword", action="store_true",
@@ -130,6 +137,9 @@ def main(argv=None) -> int:
     if args.every < 1:
         print("synreplace: -n/--every must be 1 or greater", file=sys.stderr)
         return 2
+    if not 0 <= args.threshold <= 1:
+        print("synreplace: --threshold must be between 0 and 1", file=sys.stderr)
+        return 2
 
     # Modifying a real file (not stdin, not the clipboard) writes a sibling
     # file rather than dumping to stdout, unless the caller named -o explicitly.
@@ -154,6 +164,7 @@ def main(argv=None) -> int:
         senses=args.senses,
         allow_multiword=args.multiword,
         slide=args.slide,
+        threshold=args.threshold,
     )
 
     try:
@@ -164,8 +175,11 @@ def main(argv=None) -> int:
 
     if args.verbose:
         for item in replacements:
-            print("  #%d %s -> %s" % (item.position, item.original, item.replacement),
-                  file=sys.stderr)
+            print(
+                "  #%d %s -> %s (%.0f%% similar)"
+                % (item.position, item.original, item.replacement, item.similarity * 100),
+                file=sys.stderr,
+            )
         print("%d substitution%s" % (len(replacements), "" if len(replacements) == 1 else "s"),
               file=sys.stderr)
     return 0

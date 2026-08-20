@@ -39,14 +39,25 @@ MIN_LENGTH = 3
 class SynonymFinder:
     """Finds a drop-in synonym for a tagged word, or None when there is none.
 
-    "Closest" means: the most frequent sense of the word (WordNet orders
-    synsets by corpus frequency), and within that sense the lemma with the
-    highest frequency count.
+    "Closest" means: among the `senses` most common meanings of the word,
+    whichever candidate is most similar (Wu-Palmer score) to its single most
+    common meaning; ties broken by corpus frequency, then alphabetically.
+    At the default `senses=1` this collapses to "the most frequent lemma in
+    the word's single most common sense."
+
+    `threshold` gates how far `senses` is allowed to stray from that primary
+    sense. A word's own synset is always 100% similar to itself, so with the
+    default `senses=1` every candidate already meets any threshold trivially;
+    the threshold only starts rejecting candidates once `senses > 1` opens up
+    less-related meanings of the word.
     """
 
-    def __init__(self, senses: int = 1, allow_multiword: bool = False) -> None:
+    def __init__(
+        self, senses: int = 1, allow_multiword: bool = False, threshold: float = 0.95
+    ) -> None:
         self.senses = max(1, senses)
         self.allow_multiword = allow_multiword
+        self.threshold = threshold
         self._wn = None
         self._irregulars: Dict[str, Dict[str, Set[str]]] = {}
 
@@ -60,8 +71,13 @@ class SynonymFinder:
             self._wn = wordnet
         return self._wn
 
-    def find(self, word: str, tag: str) -> Optional[str]:
-        """Best synonym for `word` in the same grammatical form, or None."""
+    def find(self, word: str, tag: str) -> Optional[Tuple[str, float]]:
+        """Best (synonym, similarity) for `word` in the same form, or None.
+
+        `similarity` is the candidate's Wu-Palmer score against the word's
+        dominant sense -- see `_candidates`. It is always `1.0` unless
+        `senses > 1` pulled the winning candidate from a less common sense.
+        """
         mapping = TAG_MAP.get(tag)
         if mapping is None:
             return None  # part of speech we never touch
@@ -80,21 +96,42 @@ class SynonymFinder:
 
         # Walk candidates best-first and take the first one we can inflect
         # correctly; a candidate that only differs by inflection is no change.
-        for candidate in self._candidates(lemma, pos):
+        for candidate, similarity in self._candidates(lemma, pos):
             inflected = self._inflect(candidate, pos, form)
             if inflected is not None and inflected != lowered:
-                return inflected
+                return inflected, similarity
         return None
 
-    def _candidates(self, lemma: str, pos: str) -> List[str]:
-        """Candidate lemmas, nearest sense first, most frequent first."""
+    def _candidates(self, lemma: str, pos: str) -> List[Tuple[str, float]]:
+        """(lemma, similarity) candidates, most similar sense first, most
+        frequent first within a similarity tier.
+
+        `similarity` is each candidate's Wu-Palmer score (WordNet's standard
+        0-1 relatedness measure, based on how close two senses' nearest shared
+        ancestor is in the meaning hierarchy) against the word's own dominant
+        sense. The dominant sense is always `1.0` similar to itself; senses
+        with no comparable path score `0.0`. Below `threshold`, a sense is
+        dropped entirely rather than reported with a low score.
+        """
         # WordNet returns synsets ordered by how common the sense is, so
         # slicing to `senses` keeps us near the word's dominant meaning.
         synsets = self.wn.synsets(lemma, pos=pos)[: self.senses]
-        ordered: List[str] = []
+        if not synsets:
+            return []
+        primary_sense = synsets[0]  # what "similarity" is measured against
+
+        # Collect every qualifying candidate first, then rank globally --
+        # rather than sense by sense -- so the closest-meaning synonym wins
+        # even if it happens to sit in the word's 2nd or 3rd most common sense.
+        scored: List[Tuple[float, int, str]] = []
         seen: Set[str] = {lemma}
         for synset in synsets:
-            scored = []
+            if synset is primary_sense:
+                similarity = 1.0
+            else:
+                similarity = synset.wup_similarity(primary_sense) or 0.0
+                if self.threshold > 0 and similarity < self.threshold:
+                    continue  # this whole sense drifted too far from the dominant one
             for wn_lemma in synset.lemmas():
                 name = wn_lemma.name()
                 if "_" in name or "-" in name:
@@ -108,11 +145,12 @@ class SynonymFinder:
                 if normalized.startswith(lemma) or lemma.startswith(normalized):
                     continue
                 seen.add(normalized)
-                # Negative count sorts the most frequent lemma first; the name
-                # breaks ties so the same input always gives the same output.
-                scored.append((-wn_lemma.count(), normalized))
-            ordered.extend(name for _, name in sorted(scored))
-        return ordered
+                scored.append((similarity, wn_lemma.count(), normalized))
+
+        # Highest similarity first; within a tie, highest frequency; within
+        # that, alphabetical, so the same input always gives the same output.
+        scored.sort(key=lambda item: (-item[0], -item[1], item[2]))
+        return [(name, similarity) for similarity, _, name in scored]
 
     def _inflect(self, lemma: str, pos: str, form: str) -> Optional[str]:
         """Reproduce `form` for `lemma`, or None if only an irregular would do."""

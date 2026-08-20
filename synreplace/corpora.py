@@ -13,6 +13,14 @@ REQUIRED = [
     ),
 ]
 
+# Same shape as REQUIRED, but a failed download only prints a warning: inflect.py
+# already falls back to its old heuristic without this, it just gets less
+# accurate consonant-doubling for multi-syllable verbs ("occur" -> "occuring"
+# instead of "occurring").
+OPTIONAL = [
+    (("corpora/cmudict.zip", "corpora/cmudict"), ("cmudict",)),
+]
+
 
 def _present(paths) -> bool:
     import nltk
@@ -45,4 +53,18 @@ def ensure_corpora(quiet: bool = False) -> None:
                 "Could not download NLTK data '%s'. Check your network connection, "
                 "or fetch it manually with:\n"
                 "    python -m nltk.downloader %s" % (package_ids[0], package_ids[0])
+            )
+
+    for paths, package_ids in OPTIONAL:
+        if _present(paths):
+            continue
+        for package_id in package_ids:
+            if nltk.download(package_id, quiet=True):
+                break
+        if not _present(paths) and not quiet:
+            print(
+                "Note: could not download optional NLTK data '%s' -- "
+                "verb inflection will fall back to a less precise heuristic."
+                % package_ids[0],
+                file=sys.stderr,
             )

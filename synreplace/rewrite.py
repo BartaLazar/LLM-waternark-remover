@@ -13,6 +13,7 @@ class Replacement:
     position: int  # 1-based index among words, counting every word in the text
     original: str
     replacement: str
+    similarity: float  # Wu-Palmer score against the word's dominant sense; see SynonymFinder
 
 
 def rewrite(
@@ -21,21 +22,23 @@ def rewrite(
     senses: int = 1,
     allow_multiword: bool = False,
     slide: bool = False,
+    threshold: float = 0.95,
     finder: Optional[SynonymFinder] = None,
 ) -> Tuple[str, List[Replacement]]:
     """Return the rewritten text and the list of substitutions made.
 
     Every `every`-th word is looked up. Words with no usable synonym -- function
-    words, names, anything WordNet does not cover -- are left alone; with
-    `slide=True` the search moves on to the following word instead, which keeps
-    the substitution rate close to 1-in-N.
+    words, names, anything WordNet does not cover, or a sense too dissimilar to
+    the word's dominant meaning to clear `threshold` (see `SynonymFinder`) --
+    are left alone; with `slide=True` the search moves on to the following word
+    instead, which keeps the substitution rate close to 1-in-N.
     """
     if every < 1:
         raise ValueError("every must be >= 1")
 
     from nltk import pos_tag
 
-    finder = finder or SynonymFinder(senses=senses, allow_multiword=allow_multiword)
+    finder = finder or SynonymFinder(senses=senses, allow_multiword=allow_multiword, threshold=threshold)
     tokens = tokenize(text)
     # Positions of the real words within the full token list; gaps are ignored
     # for counting but stay in `tokens` so the output keeps its formatting.
@@ -53,15 +56,16 @@ def rewrite(
         if ordinal < next_target:
             continue
         original = tokens[token_index].text
-        synonym = finder.find(original, tags[ordinal - 1][1])
-        if synonym is None:
+        found = finder.find(original, tags[ordinal - 1][1])
+        if found is None:
             # Hold the slot open for the next word, or skip to the next
             # multiple of N and accept a missed substitution.
             if not slide:
                 next_target = ordinal + every
             continue
+        synonym, similarity = found
         tokens[token_index].text = match_case(original, synonym)
-        replacements.append(Replacement(ordinal, original, tokens[token_index].text))
+        replacements.append(Replacement(ordinal, original, tokens[token_index].text, similarity))
         # Measure the next interval from where we actually landed, so sliding
         # never bunches two substitutions closer than N words apart.
         next_target = ordinal + every

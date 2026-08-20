@@ -31,6 +31,12 @@ class TestTokens(unittest.TestCase):
 
 
 class TestInflect(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # add_ing/add_ed consult cmudict for stress-aware consonant doubling;
+        # make sure it's there before the tests that depend on it run.
+        ensure_corpora(quiet=True)
+
     def test_add_s(self):
         cases = {
             "dog": "dogs", "box": "boxes", "watch": "watches", "bush": "bushes",
@@ -47,10 +53,77 @@ class TestInflect(unittest.TestCase):
         for word, expected in cases.items():
             self.assertEqual(add_ing(word), expected, word)
 
+    def test_add_ing_doubles_a_stressed_final_syllable(self):
+        # Multi-syllable verbs stressed on their last syllable double it too,
+        # not just single-syllable ones ("stop" -> "stopping").
+        cases = {
+            "occur": "occurring", "prefer": "preferring", "begin": "beginning",
+            "admit": "admitting", "permit": "permitting", "refer": "referring",
+            "control": "controlling", "regret": "regretting",
+        }
+        for word, expected in cases.items():
+            self.assertEqual(add_ing(word), expected, word)
+
+    def test_add_ing_does_not_double_an_unstressed_final_syllable(self):
+        # These end in the same CVC shape but are stressed earlier, so they
+        # must not double ("open" -> "opening", not "openning").
+        cases = {
+            "open": "opening", "listen": "listening", "happen": "happening",
+            "benefit": "benefiting", "offer": "offering", "enter": "entering",
+            "travel": "traveling",
+        }
+        for word, expected in cases.items():
+            self.assertEqual(add_ing(word), expected, word)
+
+    def test_add_ing_doubles_after_a_qu_digraph(self):
+        # "qu" is one consonant sound (/kw/), not a vowel digraph, so these
+        # are a real CVC shape and double like any other stressed CVC stem.
+        cases = {
+            "equip": "equipping", "quit": "quitting", "quiz": "quizzing",
+            "acquit": "acquitting",
+        }
+        for word, expected in cases.items():
+            self.assertEqual(add_ing(word), expected, word)
+
+    def test_add_ing_does_not_double_a_real_vowel_digraph(self):
+        # Unlike "qu", these really are two vowel sounds/a long vowel, and
+        # must not be mistaken for a "qu"-style single consonant unit.
+        cases = {
+            "rain": "raining", "wait": "waiting", "float": "floating",
+            "cheat": "cheating",
+        }
+        for word, expected in cases.items():
+            self.assertEqual(add_ing(word), expected, word)
+
     def test_add_ed(self):
         cases = {
             "walk": "walked", "like": "liked", "stop": "stopped",
             "carry": "carried", "play": "played", "visit": "visited",
+        }
+        for word, expected in cases.items():
+            self.assertEqual(add_ed(word), expected, word)
+
+    def test_add_ed_doubles_a_stressed_final_syllable(self):
+        cases = {
+            "occur": "occurred", "prefer": "preferred", "admit": "admitted",
+            "permit": "permitted", "refer": "referred", "control": "controlled",
+            "regret": "regretted",
+        }
+        for word, expected in cases.items():
+            self.assertEqual(add_ed(word), expected, word)
+
+    def test_add_ed_does_not_double_an_unstressed_final_syllable(self):
+        cases = {
+            "open": "opened", "listen": "listened", "happen": "happened",
+            "benefit": "benefited", "offer": "offered", "enter": "entered",
+        }
+        for word, expected in cases.items():
+            self.assertEqual(add_ed(word), expected, word)
+
+    def test_add_ed_doubles_after_a_qu_digraph(self):
+        cases = {
+            "equip": "equipped", "quit": "quitted", "quiz": "quizzed",
+            "acquit": "acquitted",
         }
         for word, expected in cases.items():
             self.assertEqual(add_ed(word), expected, word)
@@ -88,8 +161,51 @@ class TestSynonymFinder(unittest.TestCase):
         self.assertEqual(self.finder._inflect("dog", "n", "s"), "dogs")
 
     def test_returns_a_different_word_in_the_same_form(self):
-        self.assertEqual(self.finder.find("researchers", "NNS"), "investigators")
-        self.assertEqual(self.finder.find("difficult", "JJ"), "hard")
+        self.assertEqual(self.finder.find("researchers", "NNS"), ("investigators", 1.0))
+        self.assertEqual(self.finder.find("difficult", "JJ"), ("hard", 1.0))
+
+    def test_default_threshold_is_a_no_op_at_senses_1(self):
+        # A word's primary sense is always 100% similar to itself, so the
+        # default threshold can never reject anything when senses=1.
+        strict = SynonymFinder(senses=1, threshold=0.95)
+        permissive = SynonymFinder(senses=1, threshold=0.0)
+        for word, tag in [("researchers", "NNS"), ("difficult", "JJ"), ("fox", "NN")]:
+            result = strict.find(word, tag)
+            self.assertEqual(result, permissive.find(word, tag), word)
+            if result is not None:
+                self.assertEqual(result[1], 1.0, word)
+
+    def test_high_threshold_rejects_a_distant_sense(self):
+        # "fox" (dodger.n.01, wup~0.48) and "lazy" (faineant.s.01, wup~0.5)
+        # both have a same-spelling-adjacent candidate only in a weakly
+        # related sense reachable via --senses.
+        loose = SynonymFinder(senses=3, threshold=0.0)
+        strict = SynonymFinder(senses=3, threshold=0.95)
+        fox_word, fox_similarity = loose.find("fox", "NN")
+        self.assertEqual(fox_word, "dodger")
+        self.assertLess(fox_similarity, 0.95)
+        self.assertIsNone(strict.find("fox", "NN"))
+        lazy_word, lazy_similarity = loose.find("lazy", "JJ")
+        self.assertEqual(lazy_word, "indolent")
+        self.assertLess(lazy_similarity, 0.95)
+        self.assertIsNone(strict.find("lazy", "JJ"))
+
+    def test_threshold_is_ignored_when_disabled(self):
+        finder = SynonymFinder(senses=3, threshold=0)
+        word, similarity = finder.find("fox", "NN")
+        self.assertEqual(word, "dodger")
+        self.assertGreater(similarity, 0.0)
+        self.assertLess(similarity, 1.0)
+
+    def test_picks_highest_similarity_across_senses_not_first_in_sense_order(self):
+        # dog's 2nd sense (frump.n.01, wup~0.60) sorts before its 4th sense
+        # (cad.n.01, wup~0.63, lemma "hound") in WordNet's own sense order --
+        # the winner should still be whichever scores higher, not whichever
+        # sense comes first.
+        finder = SynonymFinder(senses=5, threshold=0.5)
+        word, similarity = finder.find("dog", "NN")
+        self.assertEqual(word, "hound")
+        self.assertAlmostEqual(similarity, 0.631578947368421)
 
 
 class TestRewrite(unittest.TestCase):
@@ -117,6 +233,17 @@ class TestRewrite(unittest.TestCase):
         positions = [r.position for r in replacements]
         for earlier, later in zip(positions, positions[1:]):
             self.assertGreaterEqual(later - earlier, 3)
+
+    def test_threshold_narrows_multi_sense_substitutions(self):
+        # With senses=3 and the low threshold, "fox" and "lazy" pick up
+        # weakly-related synonyms; raising the threshold falls back to
+        # skipping/sliding past those two words instead.
+        _, loose = rewrite(SAMPLE, every=1, senses=3, threshold=0.0)
+        _, strict = rewrite(SAMPLE, every=1, senses=3, threshold=0.95)
+        loose_words = {r.original for r in loose}
+        strict_words = {r.original for r in strict}
+        self.assertIn("fox", loose_words)
+        self.assertNotIn("fox", strict_words)
 
     def test_formatting_is_preserved(self):
         text = "  Line one has words.\n\nLine two: also words!\t(Parenthetical.)\n"
@@ -161,6 +288,18 @@ class TestCli(unittest.TestCase):
         self.assertIn("substitution", err.getvalue())
         self.assertTrue(out.getvalue().strip())
         self.assertNotEqual(out.getvalue().strip(), SAMPLE)
+
+    def test_verbose_output_includes_similarity(self):
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+
+        from synreplace.cli import main
+
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = main(["-n", "3", "--slide", "-v", SAMPLE])
+        self.assertEqual(code, 0)
+        self.assertRegex(err.getvalue(), r"-> \w+ \(\d+% similar\)")
 
     def test_clipboard_source_is_also_printed(self):
         import io
@@ -231,6 +370,32 @@ class TestCli(unittest.TestCase):
             code = main(["   "])
         self.assertEqual(code, 1)
         self.assertIn("no input text", err.getvalue())
+
+    def test_rejects_out_of_range_threshold(self):
+        import io
+        from contextlib import redirect_stderr
+
+        from synreplace.cli import main
+
+        for bad in ["-0.1", "1.1"]:
+            err = io.StringIO()
+            with redirect_stderr(err):
+                code = main(["--threshold", bad, "hello world"])
+            self.assertEqual(code, 2)
+            self.assertIn("--threshold", err.getvalue())
+
+    def test_threshold_flag_changes_output(self):
+        import io
+        from contextlib import redirect_stdout
+
+        from synreplace.cli import main
+
+        loose_out, strict_out = io.StringIO(), io.StringIO()
+        with redirect_stdout(loose_out):
+            main(["-n", "1", "--senses", "3", "--threshold", "0", SAMPLE])
+        with redirect_stdout(strict_out):
+            main(["-n", "1", "--senses", "3", "--threshold", "0.95", SAMPLE])
+        self.assertNotEqual(loose_out.getvalue(), strict_out.getvalue())
 
 
 if __name__ == "__main__":

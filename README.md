@@ -17,12 +17,15 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-The WordNet data (~10 MB) downloads itself on the first run.
+The WordNet data (~10 MB) downloads itself on the first run, along with the
+CMU Pronouncing Dictionary (used for accurate consonant-doubling like "occur"
+→ "occurring"; optional -- inflection just falls back to a cruder heuristic
+if it can't be fetched).
 
 ## Usage
 
 ```
-synreplace [-n N] [--slide] [--senses K] [--multiword] [-v]
+synreplace [-n N] [--slide] [--senses K] [--threshold T] [--multiword] [-v]
            [-c | -i FILE | -o FILE | TEXT]
 ```
 
@@ -43,8 +46,9 @@ Input is taken from the first of these that applies:
 | `-n, --every N` | Replace every N-th word (default `5`) |
 | `--slide` | If the N-th word has no synonym, try the next word instead (recommended) |
 | `--senses K` | Consider the K closest senses of the word, not just the closest (default `1`) |
+| `--threshold T` | Minimum sense similarity (`0`-`1`) a `--senses` candidate must clear (default `0.95`); `0` disables the check — see below |
 | `--multiword` | Allow multi-word synonyms such as "give up" |
-| `-v, --verbose` | List every substitution on stderr |
+| `-v, --verbose` | List every substitution on stderr, with its sense similarity |
 | `-c, --clip` | Read from and write back to the clipboard |
 | `-i, --input` / `-o, --output` | Read from / write to a file. With `-i` alone, output goes to `<name>-modified.<ext>` next to the input file |
 
@@ -59,14 +63,56 @@ a miss moves the search to the next word, keeping the rate close to 1-in-N
    the verb are treated differently.
 2. The word is reduced to its lemma (`researchers` → `researcher`).
 3. WordNet orders a word's senses by how common they are. `--senses 1` uses only
-   the most common one, which is what keeps replacements on-meaning.
-4. Within that sense, the synonym with the highest corpus frequency wins. Ties
-   break alphabetically, so the tool is fully deterministic.
+   the most common one, which is what keeps replacements on-meaning; `--senses K`
+   also considers the next `K-1` senses, subject to `--threshold`.
+4. Among every candidate gathered across those senses, the one with the
+   *highest similarity* to the word's single most common sense wins — not
+   whichever sense happens to be listed first. Ties break by corpus frequency,
+   then alphabetically, so the tool is fully deterministic.
 5. The synonym is put back into the original word's form and capitalisation —
    `expressed` → `evinced`, `Researchers` → `Investigators`.
 
 Nothing else in the text moves: whitespace, newlines, punctuation and numbers
-come out byte-identical.
+come out byte-identical. `-v` prints each substitution's sense similarity
+against the word's dominant meaning (see `--threshold` below) — always 100%
+at the default `--senses 1`:
+
+```
+  #12 researchers -> investigators (100% similar)
+```
+
+## `--threshold`: how far a synonym is allowed to drift
+
+`--senses K` (K > 1) lets a word borrow synonyms from its 2nd, 3rd, ... most
+common sense, not just its dominant one — useful for variety, but those senses
+can be barely related to what the word actually means in context (`fox` in its
+dominant sense is the animal; a rarer sense is "a person who dodges/evades",
+giving `dodger`).
+
+`--threshold` guards against that: each candidate sense is scored against the
+word's *dominant* sense using WordNet's Wu-Palmer similarity (0-1, based on
+how close their nearest common ancestor is in the meaning hierarchy), and any
+sense scoring below the threshold is dropped — the word falls through to
+skip/slide like it had no synonym at all, the same as any other unusable word.
+
+```
+$ synreplace -n 1 --slide --senses 3 --threshold 0 -v "the quick brown fox jumps over the lazy dog"
+  #2 quick -> speedy (100% similar)
+  #4 fox -> dodger (48% similar)
+  #5 jumps -> leaps (100% similar)
+  #8 lazy -> indolent (50% similar)
+  #9 dog -> frump (60% similar)
+5 substitutions
+
+$ synreplace -n 1 --slide --senses 3 --threshold 0.95 -v "the quick brown fox jumps over the lazy dog"
+  #2 quick -> speedy (100% similar)
+  #5 jumps -> leaps (100% similar)
+2 substitutions   # fox, lazy and dog are left alone — their only candidates scored below 95%
+```
+
+A word's dominant sense is always 100% similar to itself, so **the default
+`--threshold 0.95` has no effect at the default `--senses 1`** — it only starts
+rejecting candidates once `--senses` is raised above `1`.
 
 ## What is deliberately left alone
 
