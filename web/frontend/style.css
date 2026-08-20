@@ -107,7 +107,26 @@ button {
 button:hover { background: var(--accent-hover); }
 button:disabled { opacity: 0.6; cursor: not-allowed; }
 
+button.secondary {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+}
+button.secondary:hover { background: var(--accent); color: white; }
+
 #status { color: var(--muted); font-size: 0.9rem; }
+
+.text-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.35rem;
+}
+.text-header label { margin-bottom: 0; }
 
 .result-header {
   display: flex;
