@@ -317,7 +317,16 @@ button.secondary:hover { background: var(--accent-soft); border-color: var(--acc
 }
 
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-th, td { text-align: left; padding: 0.6rem 0.8rem; }
+th, td {
+  text-align: left;
+  padding: 0.6rem 0.8rem;
+  /* Cells default to vertical-align: middle, which centers a short cell's
+     text within a row grown tall by wrapped alternative chips -- the text
+     ends up floating at an inconsistent distance from the row divider below
+     it. Top-align everything so each row reads consistently regardless of
+     how many chips wrapped. */
+  vertical-align: top;
+}
 th {
   color: var(--muted);
   font-weight: 600;
