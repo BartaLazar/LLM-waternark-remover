@@ -4,6 +4,8 @@ A small CLI that takes a text and gives it back with every N-th word swapped for
 its closest synonym. Synonyms come from **WordNet** via NLTK — everything runs
 offline, no API key, no network after the first run.
 
+> Sidenote: also useful to break LLMs' watermarking. But who would want to do such silly thing...
+
 ```
 $ synreplace -n 3 --slide "The quick brown fox jumps over the lazy dog while the researchers carefully examined the surprising results of their difficult experiment."
 The quick brown fox leaps over the lazy dog while the investigators carefully examined the surprising effects of their hard experiment.
