@@ -24,12 +24,16 @@ Ultimately, the pursuit of knowledge depends on curiosity, patience, and a genui
 
 const els = {
   text: document.getElementById("text"),
+  wordCount: document.getElementById("word-count"),
   every: document.getElementById("every"),
   slide: document.getElementById("slide"),
   senses: document.getElementById("senses"),
   threshold: document.getElementById("threshold"),
+  thresholdValue: document.getElementById("threshold-value"),
   allowMultiword: document.getElementById("allow_multiword"),
   rewriteBtn: document.getElementById("rewrite-btn"),
+  rewriteIcon: document.getElementById("rewrite-icon"),
+  rewriteSpinner: document.getElementById("rewrite-spinner"),
   sampleBtn: document.getElementById("sample-btn"),
   status: document.getElementById("status"),
   resultPanel: document.getElementById("result-panel"),
@@ -44,6 +48,18 @@ const els = {
 
 function setStatus(message) {
   els.status.textContent = message;
+}
+
+function updateWordCount() {
+  const words = els.text.value.trim().split(/\s+/).filter(Boolean);
+  const count = words.length;
+  els.wordCount.textContent = count + " word" + (count === 1 ? "" : "s");
+}
+
+function setBusy(isBusy) {
+  els.rewriteBtn.disabled = isBusy;
+  els.rewriteSpinner.hidden = !isBusy;
+  els.rewriteIcon.hidden = isBusy;
 }
 
 function showError(message) {
@@ -89,14 +105,14 @@ async function rewrite() {
   }
 
   hideError();
-  els.rewriteBtn.disabled = true;
+  setBusy(true);
   setStatus("Rewriting…");
 
   const payload = {
     text: text,
     every: Number(els.every.value) || 5,
     slide: els.slide.checked,
-    senses: Number(els.senses.value) || 1,
+    senses: Number(els.senses.value) || 3,
     threshold: Number(els.threshold.value),
     allow_multiword: els.allowMultiword.checked,
   };
@@ -122,7 +138,7 @@ async function rewrite() {
   } catch (err) {
     showError("Could not reach the API: " + err.message);
   } finally {
-    els.rewriteBtn.disabled = false;
+    setBusy(false);
     setStatus("");
   }
 }
@@ -152,6 +168,7 @@ function downloadResult() {
 function pasteSampleText() {
   els.text.value = SAMPLE_TEXT;
   els.text.focus();
+  updateWordCount();
   hideError();
   setStatus("Sample text pasted.");
   setTimeout(() => setStatus(""), 1500);
@@ -161,3 +178,9 @@ els.rewriteBtn.addEventListener("click", rewrite);
 els.copyBtn.addEventListener("click", copyResult);
 els.downloadBtn.addEventListener("click", downloadResult);
 els.sampleBtn.addEventListener("click", pasteSampleText);
+els.text.addEventListener("input", updateWordCount);
+els.threshold.addEventListener("input", () => {
+  els.thresholdValue.textContent = Number(els.threshold.value).toFixed(2);
+});
+
+updateWordCount();

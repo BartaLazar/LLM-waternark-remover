@@ -42,18 +42,19 @@ class SynonymFinder:
     "Closest" means: among the `senses` most common meanings of the word,
     whichever candidate is most similar (Wu-Palmer score) to its single most
     common meaning; ties broken by corpus frequency, then alphabetically.
-    At the default `senses=1` this collapses to "the most frequent lemma in
-    the word's single most common sense."
+    At `senses=1` this collapses to "the most frequent lemma in the word's
+    single most common sense."
 
     `threshold` gates how far `senses` is allowed to stray from that primary
-    sense. A word's own synset is always 100% similar to itself, so with the
-    default `senses=1` every candidate already meets any threshold trivially;
-    the threshold only starts rejecting candidates once `senses > 1` opens up
-    less-related meanings of the word.
+    sense. A word's own synset is always 100% similar to itself, so at
+    `senses=1` every candidate already meets any threshold trivially; the
+    threshold only starts rejecting candidates once `senses > 1` opens up
+    less-related meanings of the word -- which is the default (`senses=3`),
+    so `threshold` is doing real filtering work out of the box.
     """
 
     def __init__(
-        self, senses: int = 1, allow_multiword: bool = False, threshold: float = 0.95
+        self, senses: int = 3, allow_multiword: bool = False, threshold: float = 0.95
     ) -> None:
         self.senses = max(1, senses)
         self.allow_multiword = allow_multiword

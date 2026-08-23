@@ -51,7 +51,7 @@ Input is taken from the first of these that applies:
 | --- | --- |
 | `-n, --every N` | Replace every N-th word (default `5`) |
 | `--slide` | If the N-th word has no synonym, try the next word instead (recommended) |
-| `--senses K` | Consider the K closest senses of the word, not just the closest (default `1`) |
+| `--senses K` | Consider the K closest senses of the word, not just the closest (default `3`) |
 | `--threshold T` | Minimum sense similarity (`0`-`1`) a `--senses` candidate must clear (default `0.95`); `0` disables the check — see below |
 | `--multiword` | Allow multi-word synonyms such as "give up" |
 | `-v, --verbose` | List every substitution on stderr, with its sense similarity |
@@ -69,8 +69,8 @@ a miss moves the search to the next word, keeping the rate close to 1-in-N
    the verb are treated differently.
 2. The word is reduced to its lemma (`researchers` → `researcher`).
 3. WordNet orders a word's senses by how common they are. `--senses 1` uses only
-   the most common one, which is what keeps replacements on-meaning; `--senses K`
-   also considers the next `K-1` senses, subject to `--threshold`.
+   the most common one; the default, `--senses 3`, also considers its 2nd and
+   3rd most common senses, subject to `--threshold` staying on-meaning.
 4. Among every candidate gathered across those senses, the one with the
    *highest similarity* to the word's single most common sense wins — not
    whichever sense happens to be listed first. Ties break by corpus frequency,
@@ -80,8 +80,9 @@ a miss moves the search to the next word, keeping the rate close to 1-in-N
 
 Nothing else in the text moves: whitespace, newlines, punctuation and numbers
 come out byte-identical. `-v` prints each substitution's sense similarity
-against the word's dominant meaning (see `--threshold` below) — always 100%
-at the default `--senses 1`:
+against the word's dominant meaning (see `--threshold` below) — usually 100%
+under the defaults, since a non-dominant sense also has to clear the 95%
+threshold to be used at all:
 
 ```
   #12 researchers -> investigators (100% similar)
@@ -116,9 +117,11 @@ $ synreplace -n 1 --slide --senses 3 --threshold 0.95 -v "the quick brown fox ju
 2 substitutions   # fox, lazy and dog are left alone — their only candidates scored below 95%
 ```
 
-A word's dominant sense is always 100% similar to itself, so **the default
-`--threshold 0.95` has no effect at the default `--senses 1`** — it only starts
-rejecting candidates once `--senses` is raised above `1`.
+A word's dominant sense is always 100% similar to itself, so `--threshold`
+only ever has something to reject once `--senses` is above `1` — which is the
+default (`--senses 3`), so `--threshold` is already doing real filtering work
+out of the box. Pass `--senses 1` to turn that off entirely and use only each
+word's single most common sense.
 
 ## What is deliberately left alone
 

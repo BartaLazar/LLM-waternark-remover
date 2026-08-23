@@ -59,14 +59,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="if the N-th word has no synonym, try the next word instead",
     )
     parser.add_argument(
-        "--senses", type=int, default=1, metavar="K",
-        help="consider the K closest word senses, not just the closest (default: 1)",
+        "--senses", type=int, default=3, metavar="K",
+        help="consider the K closest word senses, not just the closest (default: 3)",
     )
     parser.add_argument(
         "--threshold", type=float, default=0.95, metavar="T",
         help="minimum sense similarity (0-1) a --senses candidate must clear, "
              "or that word is skipped/slid past (default: 0.95; only matters "
-             "with --senses > 1; 0 disables the check)",
+             "with --senses > 1, which is the default; 0 disables the check)",
     )
     parser.add_argument(
         "--multiword", action="store_true",

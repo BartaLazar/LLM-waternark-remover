@@ -19,7 +19,7 @@ class Replacement:
 def rewrite(
     text: str,
     every: int = 5,
-    senses: int = 1,
+    senses: int = 3,
     allow_multiword: bool = False,
     slide: bool = False,
     threshold: float = 0.95,

@@ -27,7 +27,7 @@ class RewriteRequest(BaseModel):
                      "word instead of leaving that slot unfilled.",
     )
     senses: int = Field(
-        1, ge=1,
+        3, ge=1,
         description="Consider the K closest WordNet senses of a word, not "
                      "just its single most common one.",
     )
@@ -35,7 +35,8 @@ class RewriteRequest(BaseModel):
         0.95, ge=0.0, le=1.0,
         description="Minimum similarity (0-1) a non-dominant sense must "
                      "have to the word's dominant sense to be used; 0 "
-                     "disables the check. Only matters when senses > 1.",
+                     "disables the check. Only matters when senses > 1, "
+                     "which is the default.",
     )
     allow_multiword: bool = Field(
         False,
