@@ -1,11 +1,20 @@
 """Walk a text and swap every N-th word for its closest synonym."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 from .inflect import match_case
 from .synonyms import SynonymFinder
-from .tokens import detokenize, tokenize
+from .tokens import Token, detokenize, tokenize
+
+# Winner + this many extra choices offered alongside it (e.g. for a UI picker).
+ALTERNATIVES_LIMIT = 3
+
+
+@dataclass
+class Alternative:
+    word: str  # already re-inflected and re-cased to match the original word
+    similarity: float  # see Replacement.similarity
 
 
 @dataclass
@@ -14,6 +23,7 @@ class Replacement:
     original: str
     replacement: str
     similarity: float  # Wu-Palmer score against the word's dominant sense; see SynonymFinder
+    alternatives: List[Alternative] = field(default_factory=list)  # other valid choices, best first
 
 
 def rewrite(
@@ -33,6 +43,30 @@ def rewrite(
     are left alone; with `slide=True` the search moves on to the following word
     instead, which keeps the substitution rate close to 1-in-N.
     """
+    tokens, replacements = rewrite_tokens(
+        text, every=every, senses=senses, allow_multiword=allow_multiword,
+        slide=slide, threshold=threshold, finder=finder,
+    )
+    return detokenize(tokens), replacements
+
+
+def rewrite_tokens(
+    text: str,
+    every: int = 5,
+    senses: int = 3,
+    allow_multiword: bool = False,
+    slide: bool = False,
+    threshold: float = 0.95,
+    finder: Optional[SynonymFinder] = None,
+) -> Tuple[List[Token], List[Replacement]]:
+    """Same substitution as `rewrite()`, but returns the full token list
+    (words *and* the gaps between them) instead of the joined string.
+
+    Useful for a caller -- e.g. the web UI -- that wants to edit individual
+    words after the fact (reset one back to its original, swap in a different
+    alternative) and rebuild the text itself: `detokenize(tokens)` recovers
+    exactly what `rewrite()` would have returned.
+    """
     if every < 1:
         raise ValueError("every must be >= 1")
 
@@ -44,7 +78,7 @@ def rewrite(
     # for counting but stay in `tokens` so the output keeps its formatting.
     word_indices = [i for i, token in enumerate(tokens) if token.is_word]
     if not word_indices:
-        return text, []
+        return tokens, []
 
     # Tag once for the whole text: a word's part of speech depends on the words
     # around it ("results" the noun vs "results" the verb).
@@ -56,18 +90,21 @@ def rewrite(
         if ordinal < next_target:
             continue
         original = tokens[token_index].text
-        found = finder.find(original, tags[ordinal - 1][1])
-        if found is None:
+        found = finder.find_top(original, tags[ordinal - 1][1], limit=1 + ALTERNATIVES_LIMIT)
+        if not found:
             # Hold the slot open for the next word, or skip to the next
             # multiple of N and accept a missed substitution.
             if not slide:
                 next_target = ordinal + every
             continue
-        synonym, similarity = found
+        synonym, similarity = found[0]
+        alternatives = [Alternative(match_case(original, word), sim) for word, sim in found[1:]]
         tokens[token_index].text = match_case(original, synonym)
-        replacements.append(Replacement(ordinal, original, tokens[token_index].text, similarity))
+        replacements.append(
+            Replacement(ordinal, original, tokens[token_index].text, similarity, alternatives)
+        )
         # Measure the next interval from where we actually landed, so sliding
         # never bunches two substitutions closer than N words apart.
         next_target = ordinal + every
 
-    return detokenize(tokens), replacements
+    return tokens, replacements

@@ -35,6 +35,21 @@ BLOCKED = frozenset(
 
 MIN_LENGTH = 3
 
+# Verbs whose past tense/participle is identical to the base form ("cut",
+# never "cutted"). WordNet's own morphological exception files don't cover
+# this class at all -- they only list forms that *differ* from the base, and
+# these don't -- so left alone the regular guess (add_ed) slips through
+# unvetoed. Dialectal cases with a genuinely regular alternative in some
+# variety of English ("quit"/"quitted", "fit"/"fitted", "knit"/"knitted",
+# "wed"/"wedded") are deliberately left out so that guess isn't overridden.
+ZERO_CHANGE_VERBS = frozenset(
+    """
+    bet bid broadcast burst cast cost cut hit hurt put rid set shed shut
+    slit spread sublet thrust upset offset forecast recast preset
+    rebroadcast outbid
+    """.split()
+)
+
 
 class SynonymFinder:
     """Finds a drop-in synonym for a tagged word, or None when there is none.
@@ -79,29 +94,42 @@ class SynonymFinder:
         dominant sense -- see `_candidates`. It is always `1.0` unless
         `senses > 1` pulled the winning candidate from a less common sense.
         """
+        results = self.find_top(word, tag, limit=1)
+        return results[0] if results else None
+
+    def find_top(self, word: str, tag: str, limit: int = 4) -> List[Tuple[str, float]]:
+        """Up to `limit` valid (synonym, similarity) candidates for `word`,
+        best first -- `find()`'s winner is always `find_top(...)[0]`. The
+        rest are usable as alternative choices (e.g. for a UI picker)."""
         mapping = TAG_MAP.get(tag)
         if mapping is None:
-            return None  # part of speech we never touch
+            return []  # part of speech we never touch
         pos, form = mapping
 
         lowered = word.lower()
         # Contractions ("don't") have no clean lemma, and very short words are
         # almost all function words.
         if len(lowered) < MIN_LENGTH or lowered in BLOCKED or "'" in lowered or "’" in lowered:
-            return None
+            return []
 
         # morphy strips inflection: "researchers" -> "researcher".
         lemma = self.wn.morphy(lowered, pos) or lowered
         if lemma in BLOCKED:
-            return None
+            return []
 
-        # Walk candidates best-first and take the first one we can inflect
-        # correctly; a candidate that only differs by inflection is no change.
+        # Walk candidates best-first, keeping every one that inflects to a
+        # form actually different from the original, until `limit` is hit.
+        results: List[Tuple[str, float]] = []
+        seen_inflected = {lowered}
         for candidate, similarity in self._candidates(lemma, pos):
             inflected = self._inflect(candidate, pos, form)
-            if inflected is not None and inflected != lowered:
-                return inflected, similarity
-        return None
+            if inflected is None or inflected in seen_inflected:
+                continue
+            seen_inflected.add(inflected)
+            results.append((inflected, similarity))
+            if len(results) >= limit:
+                break
+        return results
 
     def _candidates(self, lemma: str, pos: str) -> List[Tuple[str, float]]:
         """(lemma, similarity) candidates, most similar sense first, most
@@ -156,6 +184,32 @@ class SynonymFinder:
     def _inflect(self, lemma: str, pos: str, form: str) -> Optional[str]:
         """Reproduce `form` for `lemma`, or None if only an irregular would do."""
         if form == "base":
+            return lemma
+        if " " in lemma:
+            # Multi-word candidates (only possible with allow_multiword) need
+            # the suffix on the right word, not tacked onto the whole phrase:
+            # "set up" -> "set up" + "ed" would give "set uped". English
+            # phrasal verbs put the particle after the verb ("set up",
+            # "back off"), so the verb -- the first word -- is the one that
+            # inflects; compound nouns put the head noun last ("high school"
+            # -> "high schools"), so that's the last word instead.
+            if pos == "v":
+                head, sep, rest = lemma.partition(" ")
+                inflected_head = self._inflect_word(head, pos, form)
+                return None if inflected_head is None else inflected_head + sep + rest
+            if pos == "n":
+                rest, sep, tail = lemma.rpartition(" ")
+                inflected_tail = self._inflect_word(tail, pos, form)
+                return None if inflected_tail is None else rest + sep + inflected_tail
+        return self._inflect_word(lemma, pos, form)
+
+    def _inflect_word(self, lemma: str, pos: str, form: str) -> Optional[str]:
+        """Reproduce `form` for a single word, or None if only an irregular would do."""
+        if pos == "v" and form == "ed" and lemma in ZERO_CHANGE_VERBS:
+            # Unlike an ordinary irregular verb ("go" -> "went", spelling
+            # unknown to us), a zero-change verb's past tense is *known* --
+            # it's the lemma itself -- so return it instead of vetoing a
+            # perfectly good candidate for no reason.
             return lemma
         if form == "s":
             regular = add_s(lemma)

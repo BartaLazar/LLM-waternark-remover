@@ -2,6 +2,6 @@
 
 __version__ = "0.1.0"
 
-from .rewrite import Replacement, rewrite
+from .rewrite import Alternative, Replacement, rewrite, rewrite_tokens
 
-__all__ = ["Replacement", "rewrite", "__version__"]
+__all__ = ["Alternative", "Replacement", "rewrite", "rewrite_tokens", "__version__"]

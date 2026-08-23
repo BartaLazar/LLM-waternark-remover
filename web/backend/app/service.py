@@ -10,8 +10,9 @@ rebuilt from scratch every time.
 from functools import lru_cache
 from typing import List, Tuple
 
-from synreplace.rewrite import Replacement, rewrite
+from synreplace.rewrite import Replacement, rewrite_tokens
 from synreplace.synonyms import SynonymFinder
+from synreplace.tokens import Token
 
 
 @lru_cache(maxsize=64)
@@ -26,6 +27,9 @@ def process_rewrite(
     senses: int,
     threshold: float,
     allow_multiword: bool,
-) -> Tuple[str, List[Replacement]]:
+) -> Tuple[List[Token], List[Replacement]]:
+    """Returns the full token list (not just the joined string) so the API
+    layer can also hand the client per-word editing support -- see
+    schemas.TextToken."""
     finder = _get_finder(senses, threshold, allow_multiword)
-    return rewrite(text, every=every, slide=slide, finder=finder)
+    return rewrite_tokens(text, every=every, slide=slide, finder=finder)

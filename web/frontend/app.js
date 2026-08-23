@@ -46,6 +46,12 @@ const els = {
   errorMessage: document.getElementById("error-message"),
 };
 
+// The last rewrite response's full token list (words + the gaps between
+// them), kept client-side so a Reset/alternative click can edit one word and
+// rebuild the result text without re-implementing word-boundary detection --
+// mirrors the API's `tokens` field 1:1. See web/docs/API.md.
+let currentTokens = [];
+
 function setStatus(message) {
   els.status.textContent = message;
 }
@@ -74,27 +80,86 @@ function hideError() {
 
 function renderResult(data) {
   els.resultPanel.hidden = false;
+  currentTokens = data.tokens.map((t) => ({ ...t }));
   els.result.value = data.result;
   els.substitutionsHeading.textContent =
     data.substitution_count + " substitution" + (data.substitution_count === 1 ? "" : "s");
 
   els.substitutionsBody.innerHTML = "";
   for (const item of data.replacements) {
-    const row = document.createElement("tr");
-    const similarityPct = Math.round(item.similarity * 100) + "%";
-    row.innerHTML =
-      "<td>" + item.position + "</td>" +
-      "<td>" + escapeHtml(item.original) + "</td>" +
-      "<td>" + escapeHtml(item.replacement) + "</td>" +
-      "<td>" + similarityPct + "</td>";
-    els.substitutionsBody.appendChild(row);
+    els.substitutionsBody.appendChild(buildSubstitutionRow(item));
   }
 }
 
-function escapeHtml(value) {
-  const div = document.createElement("div");
-  div.textContent = value;
-  return div.innerHTML;
+function similarityLabel(similarity) {
+  return similarity == null ? "—" : Math.round(similarity * 100) + "%";
+}
+
+function cell(text) {
+  const td = document.createElement("td");
+  td.textContent = text;
+  return td;
+}
+
+// One row per substitution: the original word, the word currently applied at
+// that position (editable via the buttons below), its similarity, up to
+// ALTERNATIVES_LIMIT alternative-synonym chips, and a Reset-to-original button.
+function buildSubstitutionRow(item) {
+  const row = document.createElement("tr");
+  row.dataset.position = item.position;
+
+  const currentCell = cell(item.replacement);
+  currentCell.className = "current-cell";
+  const similarityCell = cell(similarityLabel(item.similarity));
+  similarityCell.className = "similarity-cell";
+
+  row.appendChild(cell(String(item.position)));
+  row.appendChild(cell(item.original));
+  row.appendChild(currentCell);
+  row.appendChild(similarityCell);
+
+  const altCell = document.createElement("td");
+  altCell.className = "alternatives-cell";
+  const chips = [];
+  for (const alt of item.alternatives) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip";
+    chip.textContent = alt.word + " " + similarityLabel(alt.similarity);
+    chip.addEventListener("click", () => applyChoice(row, item, alt.word, alt.similarity, chip, chips));
+    chips.push(chip);
+    altCell.appendChild(chip);
+  }
+  row.appendChild(altCell);
+
+  const actionCell = document.createElement("td");
+  const resetBtn = document.createElement("button");
+  resetBtn.type = "button";
+  resetBtn.className = "secondary reset-btn";
+  resetBtn.title = "Reset to the original word";
+  resetBtn.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round" class="icon">' +
+    '<path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" /></svg>Reset';
+  resetBtn.addEventListener("click", () => applyChoice(row, item, item.original, null, null, chips));
+  actionCell.appendChild(resetBtn);
+  row.appendChild(actionCell);
+
+  return row;
+}
+
+// Sets `word` as the currently-applied text at `item.position`, rebuilds the
+// result textarea from the (mutated) token list, and updates this row's
+// "Current"/"Similarity" cells and which chip (if any) is marked active.
+function applyChoice(row, item, word, similarity, activeChip, allChips) {
+  const token = currentTokens.find((t) => t.is_word && t.position === item.position);
+  if (token) token.text = word;
+  els.result.value = currentTokens.map((t) => t.text).join("");
+
+  row.querySelector(".current-cell").textContent = word;
+  row.querySelector(".similarity-cell").textContent = similarityLabel(similarity);
+  row.classList.toggle("is-reset", word === item.original);
+  for (const chip of allChips) chip.classList.toggle("active", chip === activeChip);
 }
 
 async function rewrite() {

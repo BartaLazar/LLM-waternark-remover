@@ -328,6 +328,33 @@ th {
 }
 tbody tr:not(:last-child) td { border-bottom: 1px solid var(--panel-border); }
 tbody tr:hover { background: var(--accent-soft); }
+tbody tr.is-reset .current-cell { color: var(--muted); font-style: italic; }
+
+.alternatives-cell { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+.chip {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.chip:hover { border-color: var(--accent-solid); color: var(--accent-solid); }
+.chip.active {
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  color: white;
+  border-color: transparent;
+}
+
+button.reset-btn {
+  padding: 0.4rem 0.7rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.reset-btn .icon { width: 15px; height: 15px; }
 
 .error {
   background: var(--error-bg);

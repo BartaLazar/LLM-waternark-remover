@@ -5,7 +5,7 @@ and turns them into the interactive OpenAPI docs at /docs -- so field
 constraints and descriptions here are also user-facing documentation.
 """
 
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -51,6 +51,12 @@ class RewriteRequest(BaseModel):
         return value
 
 
+class Alternative(BaseModel):
+    word: str = Field(description="An alternative synonym, already re-inflected "
+                                   "and re-cased to match the original word.")
+    similarity: float = Field(description="Same meaning as Replacement.similarity.")
+
+
 class Replacement(BaseModel):
     position: int = Field(description="1-based index of the word within the text.")
     original: str = Field(description="The original word at that position.")
@@ -60,6 +66,21 @@ class Replacement(BaseModel):
                      "word's dominant sense. Always 1.0 unless senses > 1 "
                      "pulled the winning candidate from a less common sense."
     )
+    alternatives: List[Alternative] = Field(
+        default_factory=list,
+        description="Up to 3 other valid synonyms for this word, best first "
+                     "-- e.g. to offer as a picker in place of `replacement`.",
+    )
+
+
+class TextToken(BaseModel):
+    text: str = Field(description="The token's literal text.")
+    is_word: bool = Field(description="False for whitespace/punctuation between words.")
+    position: Optional[int] = Field(
+        None,
+        description="1-based word ordinal (matches Replacement.position), or "
+                     "null for a non-word token.",
+    )
 
 
 class RewriteResponse(BaseModel):
@@ -68,6 +89,13 @@ class RewriteResponse(BaseModel):
         description="Every substitution that was made, in text order."
     )
     substitution_count: int = Field(description="len(replacements), for convenience.")
+    tokens: List[TextToken] = Field(
+        description="The full text broken into words and the gaps between "
+                     "them, in order. Joining every token's `text` reproduces "
+                     "`result` exactly. Lets a client edit an individual word "
+                     "(reset it, swap in an alternative) and rebuild the text "
+                     "without re-implementing word-boundary detection."
+    )
 
 
 class HealthResponse(BaseModel):

@@ -134,25 +134,77 @@ Example (omitted fields use their defaults, shown in [`/info`](#get-apiv1info) a
 | `result` | string | The rewritten text. Whitespace, punctuation, and numbers are preserved byte-for-byte outside of the replaced words. |
 | `replacements` | array of `Replacement` | Every substitution made, in text order. Empty if nothing was replaceable. |
 | `substitution_count` | integer | `len(replacements)`, provided for convenience. |
+| `tokens` | array of `TextToken` | The full text broken into words and the gaps between them, in order — see below. |
 
 **`Replacement` object**
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `position` | integer | 1-based index of the word within the text (counting every word, not just replaced ones). |
+| `position` | integer | 1-based index of the word within the text (counting every word, not just replaced ones). Matches a `TextToken.position` below. |
 | `original` | string | The original word at that position. |
 | `replacement` | string | The synonym it was replaced with, re-inflected and re-cased to match the original. |
 | `similarity` | number | The replacement's WordNet sense similarity (`0.0`–`1.0`) to the word's dominant sense. Always `1.0` unless `senses > 1` pulled the winning candidate from a less common sense. |
+| `alternatives` | array of `Alternative` | Up to 3 other valid synonyms for this word, best first, excluding `replacement` itself. Empty if none qualified. Intended for a picker UI — see the web frontend's "Other choices" column. |
 
-Example response for the request above:
+**`Alternative` object**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `word` | string | An alternative synonym, already re-inflected and re-cased like `replacement`. |
+| `similarity` | number | Same meaning as `Replacement.similarity`. |
+
+**`TextToken` object**
+
+Every token of the *rewritten* text — words and the whitespace/punctuation
+between them — so a client can edit one word (reset it to `original`, swap in
+an `alternative`) and reconstruct `result` by concatenating every token's
+`text`, without re-implementing word-boundary detection.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `text` | string | The token's literal text. |
+| `is_word` | boolean | `false` for a whitespace/punctuation gap between words. |
+| `position` | integer or `null` | 1-based word ordinal (matches `Replacement.position`), or `null` for a non-word token. |
+
+Example response for the request above (`every: 3, slide: true`, everything
+else default), captured from the running server:
 
 ```json
 {
   "result": "The quick brown fox leaps over the lazy dog.",
   "replacements": [
-    { "position": 5, "original": "jumps", "replacement": "leaps", "similarity": 1.0 }
+    {
+      "position": 5,
+      "original": "jumps",
+      "replacement": "leaps",
+      "similarity": 1.0,
+      "alternatives": [
+        { "word": "springs", "similarity": 1.0 },
+        { "word": "bounds", "similarity": 1.0 }
+      ]
+    }
   ],
-  "substitution_count": 1
+  "substitution_count": 1,
+  "tokens": [
+    { "text": "The", "is_word": true, "position": 1 },
+    { "text": " ", "is_word": false, "position": null },
+    { "text": "quick", "is_word": true, "position": 2 },
+    { "text": " ", "is_word": false, "position": null },
+    { "text": "brown", "is_word": true, "position": 3 },
+    { "text": " ", "is_word": false, "position": null },
+    { "text": "fox", "is_word": true, "position": 4 },
+    { "text": " ", "is_word": false, "position": null },
+    { "text": "leaps", "is_word": true, "position": 5 },
+    { "text": " ", "is_word": false, "position": null },
+    { "text": "over", "is_word": true, "position": 6 },
+    { "text": " ", "is_word": false, "position": null },
+    { "text": "the", "is_word": true, "position": 7 },
+    { "text": " ", "is_word": false, "position": null },
+    { "text": "lazy", "is_word": true, "position": 8 },
+    { "text": " ", "is_word": false, "position": null },
+    { "text": "dog", "is_word": true, "position": 9 },
+    { "text": ".", "is_word": false, "position": null }
+  ]
 }
 ```
 
