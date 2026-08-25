@@ -323,9 +323,13 @@ th, td {
   /* Cells default to vertical-align: middle, which centers a short cell's
      text within a row grown tall by wrapped alternative chips -- the text
      ends up floating at an inconsistent distance from the row divider below
-     it. Top-align everything so each row reads consistently regardless of
-     how many chips wrapped. */
-  vertical-align: top;
+     it. `top` fixes that but aligns content by the *box*, not the *text* --
+     the chip/Reset buttons' own padding then pushes their label a few px
+     below the plain-text cells' baseline in the same row. `baseline` aligns
+     every cell by its actual first line of text, which lines up correctly
+     regardless of a button's padding, while still keeping short cells' text
+     near the top of a row grown tall by wrapped chips. */
+  vertical-align: baseline;
 }
 th {
   color: var(--muted);
