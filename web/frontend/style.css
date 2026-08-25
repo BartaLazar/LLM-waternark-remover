@@ -14,6 +14,11 @@
   --error-bg: #fdecec;
   --error-border: #f0b7b7;
   --error-text: #9c2b2b;
+  /* Warm amber, deliberately outside the indigo/teal accent family so a
+     highlighted word can't be mistaken for an active/selected UI element. */
+  --highlight-bg: #fef08a;
+  --highlight-pulse: #fde047;
+  --highlight-text: #713f12;
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
   --shadow-md: 0 12px 28px -8px rgba(15, 23, 42, 0.14);
   --radius-lg: 18px;
@@ -37,6 +42,9 @@
     --error-bg: #2c1a1a;
     --error-border: #5c2e2e;
     --error-text: #f0a3a3;
+    --highlight-bg: #78350f;
+    --highlight-pulse: #b45309;
+    --highlight-text: #fef3c7;
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 16px 32px -10px rgba(0, 0, 0, 0.55);
   }
@@ -125,9 +133,9 @@ main {
   transition: box-shadow 0.2s ease;
 }
 
-label { display: block; font-weight: 600; margin-bottom: 0.4rem; font-size: 0.9rem; }
+label, #result-label { display: block; font-weight: 600; margin-bottom: 0.4rem; font-size: 0.9rem; }
 
-textarea, input[type="number"] {
+textarea, input[type="number"], .result-box {
   width: 100%;
   background: var(--bg);
   color: var(--text);
@@ -141,10 +149,47 @@ textarea, input[type="number"] {
 
 textarea { resize: vertical; }
 
-textarea:focus, input[type="number"]:focus {
+textarea:focus, input[type="number"]:focus, .result-box:focus {
   outline: none;
   border-color: var(--accent-solid);
   box-shadow: 0 0 0 4px var(--accent-ring);
+}
+
+/* Renders the rewritten text as one <span> per word (see app.js) instead of
+   plain textarea content, so a clicked word can get a real, persistent
+   highlight -- a textarea can only show a native text selection, which is
+   easy to lose in 500 words and disappears the moment focus moves on. */
+.result-box {
+  display: block;
+  min-height: 14rem;
+  max-height: 28rem;
+  overflow-y: auto;
+  resize: vertical;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  line-height: 1.6;
+  cursor: text;
+}
+
+.result-word {
+  border-radius: 4px;
+  scroll-margin: 2rem;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.result-word.highlight {
+  background: var(--highlight-bg);
+  color: var(--highlight-text);
+  animation: highlight-pulse 0.5s ease;
+}
+
+@keyframes highlight-pulse {
+  0% { background: var(--highlight-pulse); }
+  100% { background: var(--highlight-bg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .result-word.highlight { animation: none; }
 }
 
 .word-count {
@@ -295,7 +340,7 @@ button.secondary:hover { background: var(--accent-soft); border-color: var(--acc
   flex-wrap: wrap;
   margin-bottom: 0.45rem;
 }
-.text-header label, .result-header label { margin-bottom: 0; }
+.text-header label, .result-header label, .result-header #result-label { margin-bottom: 0; }
 .result-actions { display: flex; gap: 0.6rem; }
 
 .result-panel { animation: rise 0.35s ease both; }

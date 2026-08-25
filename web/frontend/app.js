@@ -52,6 +52,9 @@ const els = {
 // mirrors the API's `tokens` field 1:1. See web/docs/API.md.
 let currentTokens = [];
 
+// The <span class="result-word"> currently highlighted by jumpToWord(), if any.
+let highlightedWord = null;
+
 function setStatus(message) {
   els.status.textContent = message;
 }
@@ -81,7 +84,8 @@ function hideError() {
 function renderResult(data) {
   els.resultPanel.hidden = false;
   currentTokens = data.tokens.map((t) => ({ ...t }));
-  els.result.value = data.result;
+  highlightedWord = null;
+  renderResultWords();
   els.substitutionsHeading.textContent =
     data.substitution_count + " substitution" + (data.substitution_count === 1 ? "" : "s");
 
@@ -89,6 +93,28 @@ function renderResult(data) {
   for (const item of data.replacements) {
     els.substitutionsBody.appendChild(buildSubstitutionRow(item));
   }
+}
+
+// Renders currentTokens into #result as one <span class="result-word"> per
+// word (gaps are plain text nodes), so a specific word can later get a real,
+// persistent highlight -- see jumpToWord().
+function renderResultWords() {
+  els.result.innerHTML = "";
+  for (const token of currentTokens) {
+    if (token.is_word) {
+      const span = document.createElement("span");
+      span.className = "result-word";
+      span.dataset.position = token.position;
+      span.textContent = token.text;
+      els.result.appendChild(span);
+    } else {
+      els.result.appendChild(document.createTextNode(token.text));
+    }
+  }
+}
+
+function currentResultText() {
+  return currentTokens.map((t) => t.text).join("");
 }
 
 function similarityLabel(similarity) {
@@ -173,13 +199,14 @@ function buildSubstitutionRow(item) {
   return row;
 }
 
-// Sets `word` as the currently-applied text at `item.position`, rebuilds the
-// result textarea from the (mutated) token list, and updates this row's
+// Sets `word` as the currently-applied text at `item.position`, updates that
+// word's span in the result view in place, and updates this row's
 // "Current"/"Similarity" cells and which chip (if any) is marked active.
 function applyChoice(row, item, word, similarity, activeChip, allChips) {
   const token = currentTokens.find((t) => t.is_word && t.position === item.position);
   if (token) token.text = word;
-  els.result.value = currentTokens.map((t) => t.text).join("");
+  const span = resultWordSpan(item.position);
+  if (span) span.textContent = word;
 
   row.querySelector(".word-link").textContent = word;
   row.querySelector(".similarity-cell").textContent = similarityLabel(similarity);
@@ -187,30 +214,21 @@ function applyChoice(row, item, word, similarity, activeChip, allChips) {
   for (const chip of allChips) chip.classList.toggle("active", chip === activeChip);
 }
 
-// The character range of the word at `position` within the *current*
-// result text -- walks currentTokens (kept in sync with #result on every
-// edit) rather than the original API response, so this stays correct even
-// after a Reset or an alternative has changed what's actually there.
-function findWordRange(position) {
-  let offset = 0;
-  for (const token of currentTokens) {
-    const length = token.text.length;
-    if (token.is_word && token.position === position) {
-      return { start: offset, end: offset + length };
-    }
-    offset += length;
-  }
-  return null;
+function resultWordSpan(position) {
+  return els.result.querySelector('.result-word[data-position="' + position + '"]');
 }
 
-// Selects that word's exact occurrence in the (readonly) result textarea.
-// Selecting text in a focused textarea is enough to make browsers scroll it
-// into view on their own, even in a long, scrolled textarea.
+// Gives that word's span in the result view a real, persistent highlight
+// (clearing any previous one) and scrolls it to the center of the box --
+// more visible and more reliable than a native text selection, which is easy
+// to lose among 500 words and disappears the moment focus moves elsewhere.
 function jumpToWord(position) {
-  const range = findWordRange(position);
-  if (!range) return;
-  els.result.focus();
-  els.result.setSelectionRange(range.start, range.end);
+  const span = resultWordSpan(position);
+  if (!span) return;
+  if (highlightedWord) highlightedWord.classList.remove("highlight");
+  span.classList.add("highlight");
+  highlightedWord = span;
+  span.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 async function rewrite() {
@@ -261,7 +279,7 @@ async function rewrite() {
 
 async function copyResult() {
   try {
-    await navigator.clipboard.writeText(els.result.value);
+    await navigator.clipboard.writeText(currentResultText());
     setStatus("Copied to clipboard.");
     setTimeout(() => setStatus(""), 1500);
   } catch (err) {
@@ -270,7 +288,7 @@ async function copyResult() {
 }
 
 function downloadResult() {
-  const blob = new Blob([els.result.value], { type: "text/plain;charset=utf-8" });
+  const blob = new Blob([currentResultText()], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
