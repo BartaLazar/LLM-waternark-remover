@@ -19,7 +19,8 @@ class RewriteRequest(BaseModel):
     )
     every: int = Field(
         5, ge=1,
-        description="Replace every N-th word.",
+        description="Replace the first word, then every N-th word after it "
+                     "(word 1, 1+N, 1+2N, ...).",
     )
     slide: bool = Field(
         False,

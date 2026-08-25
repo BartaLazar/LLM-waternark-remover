@@ -252,14 +252,23 @@ class TestRewrite(unittest.TestCase):
         ensure_corpora(quiet=True)
 
     def test_only_targeted_positions_change(self):
-        result, replacements = rewrite(SAMPLE, every=3)
+        result, replacements = rewrite(SAMPLE, every=4)
         original_words = [t.text for t in tokenize(SAMPLE) if t.is_word]
         result_words = [t.text for t in tokenize(result) if t.is_word]
         self.assertEqual(len(original_words), len(result_words))
         changed = {i for i, (a, b) in enumerate(zip(original_words, result_words), 1) if a != b}
         self.assertEqual(changed, {r.position for r in replacements})
+        self.assertTrue(changed, "test input produced no substitutions to check")
         for position in changed:
-            self.assertEqual(position % 3, 0, "changed a word off the N-grid")
+            # The grid starts at word 1, not word `every`: 1, 1+every, 1+2*every, ...
+            self.assertEqual((position - 1) % 4, 0, "changed a word off the N-grid")
+
+    def test_grid_starts_at_the_first_word(self):
+        # word 1 is always attempted, regardless of `every` -- not word
+        # `every` like a naive "every Nth word, 1-indexed from N" would give.
+        result, replacements = rewrite("quick brown fox jumps here", every=5)
+        self.assertEqual(result, "speedy brown fox jumps here")
+        self.assertEqual([r.position for r in replacements], [1])
 
     def test_slide_finds_more_substitutions(self):
         _, strict = rewrite(SAMPLE, every=3)

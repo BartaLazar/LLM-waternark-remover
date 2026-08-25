@@ -111,8 +111,8 @@ byte-identical output to the CLI.
 | Field | Type | Required | Default | Constraints | Description |
 | --- | --- | --- | --- | --- | --- |
 | `text` | string | yes | — | non-empty after trimming whitespace | The text to rewrite. |
-| `every` | integer | no | `5` | `>= 1` | Replace every N-th word. |
-| `slide` | boolean | no | `false` | — | If the N-th word has no usable synonym, try the next word instead of leaving that slot unfilled. Keeps the substitution rate close to 1-in-N; without it, substitutions land only on exact multiples of N and misses are common. |
+| `every` | integer | no | `5` | `>= 1` | Replace the first word, then every N-th word after it (word 1, `1+N`, `1+2N`, ...). |
+| `slide` | boolean | no | `false` | — | If a targeted word has no usable synonym, try the next word instead of leaving that slot unfilled. Keeps the substitution rate close to 1-in-N; without it, substitutions land only on the fixed grid (word 1, `1+N`, `1+2N`, ...) and misses are common. |
 | `senses` | integer | no | `3` | `>= 1` | Consider the K closest WordNet senses of a word, not just its single most common one. `1` never looks past the dominant sense. |
 | `threshold` | number | no | `0.95` | `0.0`–`1.0` | Minimum Wu-Palmer similarity a non-dominant sense must have to the word's dominant sense to be used as a candidate; `0` disables the check. **Only has any effect when `senses > 1`**, which is the default — at `senses=1` a word's only sense is trivially 100% similar to itself, so every candidate already clears any threshold. |
 | `allow_multiword` | boolean | no | `false` | — | Allow multi-word synonyms such as `"give up"`. |
@@ -171,8 +171,15 @@ else default), captured from the running server:
 
 ```json
 {
-  "result": "The quick brown fox leaps over the lazy dog.",
+  "result": "The speedy brown fox leaps over the lazy dog.",
   "replacements": [
+    {
+      "position": 2,
+      "original": "quick",
+      "replacement": "speedy",
+      "similarity": 1.0,
+      "alternatives": []
+    },
     {
       "position": 5,
       "original": "jumps",
@@ -184,11 +191,11 @@ else default), captured from the running server:
       ]
     }
   ],
-  "substitution_count": 1,
+  "substitution_count": 2,
   "tokens": [
     { "text": "The", "is_word": true, "position": 1 },
     { "text": " ", "is_word": false, "position": null },
-    { "text": "quick", "is_word": true, "position": 2 },
+    { "text": "speedy", "is_word": true, "position": 2 },
     { "text": " ", "is_word": false, "position": null },
     { "text": "brown", "is_word": true, "position": 3 },
     { "text": " ", "is_word": false, "position": null },

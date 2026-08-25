@@ -37,11 +37,13 @@ def rewrite(
 ) -> Tuple[str, List[Replacement]]:
     """Return the rewritten text and the list of substitutions made.
 
-    Every `every`-th word is looked up. Words with no usable synonym -- function
-    words, names, anything WordNet does not cover, or a sense too dissimilar to
-    the word's dominant meaning to clear `threshold` (see `SynonymFinder`) --
-    are left alone; with `slide=True` the search moves on to the following word
-    instead, which keeps the substitution rate close to 1-in-N.
+    Starting from the first word, every `every`-th word after it is looked up
+    (word 1, then `1 + every`, `1 + 2*every`, ...). Words with no usable
+    synonym -- function words, names, anything WordNet does not cover, or a
+    sense too dissimilar to the word's dominant meaning to clear `threshold`
+    (see `SynonymFinder`) -- are left alone; with `slide=True` the search
+    moves on to the following word instead, which keeps the substitution rate
+    close to 1-in-N.
     """
     tokens, replacements = rewrite_tokens(
         text, every=every, senses=senses, allow_multiword=allow_multiword,
@@ -84,7 +86,7 @@ def rewrite_tokens(
     # around it ("results" the noun vs "results" the verb).
     tags = pos_tag([tokens[i].text for i in word_indices])
     replacements: List[Replacement] = []
-    next_target = every  # 1-based ordinal of the next word to attempt
+    next_target = 1  # 1-based ordinal of the next word to attempt; starts at the first word
 
     for ordinal, token_index in enumerate(word_indices, start=1):
         if ordinal < next_target:
@@ -92,8 +94,8 @@ def rewrite_tokens(
         original = tokens[token_index].text
         found = finder.find_top(original, tags[ordinal - 1][1], limit=1 + ALTERNATIVES_LIMIT)
         if not found:
-            # Hold the slot open for the next word, or skip to the next
-            # multiple of N and accept a missed substitution.
+            # Hold the slot open for the next word, or skip ahead N words on
+            # the grid and accept a missed substitution.
             if not slide:
                 next_target = ordinal + every
             continue

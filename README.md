@@ -8,7 +8,7 @@ offline, no API key, no network after the first run.
 
 ```
 $ synreplace -n 3 --slide "The quick brown fox jumps over the lazy dog while the researchers carefully examined the surprising results of their difficult experiment."
-The quick brown fox leaps over the lazy dog while the investigators carefully examined the surprising effects of their hard experiment.
+The speedy brown fox leaps over the lazy dog while the investigators carefully examined the surprising effects of their hard experiment.
 ```
 
 ## Install
@@ -51,7 +51,7 @@ Input is taken from the first of these that applies:
 
 | Flag | Meaning |
 | --- | --- |
-| `-n, --every N` | Replace every N-th word (default `5`) |
+| `-n, --every N` | Replace the first word, then every N-th word after it (default `5`) |
 | `--slide` | If the N-th word has no synonym, try the next word instead (recommended) |
 | `--senses K` | Consider the K closest senses of the word, not just the closest (default `3`) |
 | `--threshold T` | Minimum sense similarity (`0`-`1`) a `--senses` candidate must clear (default `0.95`); `0` disables the check — see below |
@@ -60,10 +60,12 @@ Input is taken from the first of these that applies:
 | `-c, --clip` | Read from and write back to the clipboard |
 | `-i, --input` / `-o, --output` | Read from / write to a file. With `-i` alone, output goes to `<name>-modified.<ext>` next to the input file |
 
-Without `--slide`, a missed word is just skipped — substitutions land only on
-exact multiples of N, so the count is often well under 1-in-N. With `--slide`,
-a miss moves the search to the next word, keeping the rate close to 1-in-N
-(substitutions still stay at least N words apart).
+Counting starts at the first word: the grid is word 1, then `1 + N`, `1 + 2N`,
+and so on — not word `N` itself. Without `--slide`, a missed word is just
+skipped — substitutions land only on that fixed grid, so the count is often
+well under 1-in-N. With `--slide`, a miss moves the search to the next word
+instead, keeping the rate close to 1-in-N (substitutions still stay at least
+N words apart).
 
 ## How a synonym is picked
 
