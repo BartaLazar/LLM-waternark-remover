@@ -108,8 +108,15 @@ function buildSubstitutionRow(item) {
   const row = document.createElement("tr");
   row.dataset.position = item.position;
 
-  const currentCell = cell(item.replacement);
+  const currentCell = document.createElement("td");
   currentCell.className = "current-cell";
+  const wordLink = document.createElement("button");
+  wordLink.type = "button";
+  wordLink.className = "word-link";
+  wordLink.textContent = item.replacement;
+  wordLink.title = "Find this word in the result";
+  wordLink.addEventListener("click", () => jumpToWord(item.position));
+  currentCell.appendChild(wordLink);
   const similarityCell = cell(similarityLabel(item.similarity));
   similarityCell.className = "similarity-cell";
 
@@ -174,10 +181,36 @@ function applyChoice(row, item, word, similarity, activeChip, allChips) {
   if (token) token.text = word;
   els.result.value = currentTokens.map((t) => t.text).join("");
 
-  row.querySelector(".current-cell").textContent = word;
+  row.querySelector(".word-link").textContent = word;
   row.querySelector(".similarity-cell").textContent = similarityLabel(similarity);
   row.classList.toggle("is-reset", word === item.original);
   for (const chip of allChips) chip.classList.toggle("active", chip === activeChip);
+}
+
+// The character range of the word at `position` within the *current*
+// result text -- walks currentTokens (kept in sync with #result on every
+// edit) rather than the original API response, so this stays correct even
+// after a Reset or an alternative has changed what's actually there.
+function findWordRange(position) {
+  let offset = 0;
+  for (const token of currentTokens) {
+    const length = token.text.length;
+    if (token.is_word && token.position === position) {
+      return { start: offset, end: offset + length };
+    }
+    offset += length;
+  }
+  return null;
+}
+
+// Selects that word's exact occurrence in the (readonly) result textarea.
+// Selecting text in a focused textarea is enough to make browsers scroll it
+// into view on their own, even in a long, scrolled textarea.
+function jumpToWord(position) {
+  const range = findWordRange(position);
+  if (!range) return;
+  els.result.focus();
+  els.result.setSelectionRange(range.start, range.end);
 }
 
 async function rewrite() {

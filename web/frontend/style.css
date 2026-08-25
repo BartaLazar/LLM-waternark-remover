@@ -341,7 +341,25 @@ th {
 }
 tbody tr:not(:last-child) td { border-bottom: 1px solid var(--panel-border); }
 tbody tr:hover { background: var(--accent-soft); }
-tbody tr.is-reset .current-cell { color: var(--muted); font-style: italic; }
+tbody tr.is-reset .current-cell .word-link { color: var(--muted); font-style: italic; }
+
+.word-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-decoration-color: var(--panel-border);
+  text-underline-offset: 3px;
+}
+.word-link:hover {
+  color: var(--accent-solid);
+  text-decoration-style: solid;
+  text-decoration-color: var(--accent-solid);
+}
 
 .alternatives-cell { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 
