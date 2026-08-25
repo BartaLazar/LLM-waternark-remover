@@ -362,6 +362,16 @@ tbody tr.is-reset .current-cell { color: var(--muted); font-style: italic; }
   border-color: transparent;
 }
 
+/* Same box model as a real .chip (border, padding, line height) so a row
+   with no alternatives contributes identical baseline metrics to the table
+   as a row that has one -- see buildSubstitutionRow in app.js. Invisible,
+   not just empty: visibility:hidden keeps the box (and its metrics) intact
+   while removing it from view and from the accessibility tree's content. */
+.chip-placeholder {
+  visibility: hidden;
+  border-color: transparent;
+}
+
 button.reset-btn {
   padding: 0.4rem 0.7rem;
   font-size: 0.78rem;

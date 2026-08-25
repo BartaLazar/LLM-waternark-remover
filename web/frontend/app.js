@@ -121,6 +121,24 @@ function buildSubstitutionRow(item) {
   const altCell = document.createElement("td");
   altCell.className = "alternatives-cell";
   const chips = [];
+  if (item.alternatives.length === 0) {
+    // A td with no content at all doesn't establish a normal text baseline,
+    // so `vertical-align: baseline` computes a slightly different (shorter)
+    // row height for it than for a sibling row whose alternatives cell holds
+    // a real chip -- rows drift out of alignment by a pixel or two. An
+    // invisible placeholder with the exact same tag (a <button>, not a
+    // <span> -- a plain span is inline by default and its vertical padding
+    // doesn't expand the line box the way a button's does) has identical box
+    // metrics to a real chip, so every row's baseline math matches
+    // regardless of whether it has alternatives to show.
+    const placeholder = document.createElement("button");
+    placeholder.type = "button";
+    placeholder.className = "chip chip-placeholder";
+    placeholder.textContent = "—";
+    placeholder.disabled = true;
+    placeholder.setAttribute("aria-hidden", "true");
+    altCell.appendChild(placeholder);
+  }
   for (const alt of item.alternatives) {
     const chip = document.createElement("button");
     chip.type = "button";
