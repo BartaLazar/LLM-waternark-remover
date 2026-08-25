@@ -88,7 +88,7 @@
 
     <section class="panel result-panel" id="result-panel" hidden>
       <div class="result-header">
-        <label for="result">Result</label>
+        <span id="result-label">Result</span>
         <div class="result-actions">
           <button id="copy-btn" type="button" class="secondary">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -107,13 +107,17 @@
           </button>
         </div>
       </div>
-      <textarea id="result" rows="10" readonly></textarea>
+      <div id="result" class="result-box" role="textbox" aria-readonly="true"
+           aria-labelledby="result-label" tabindex="0"></div>
 
       <h2 id="substitutions-heading"></h2>
       <div class="table-wrap">
         <table id="substitutions">
           <thead>
-            <tr><th>#</th><th>Original</th><th>Replacement</th><th>Similarity</th></tr>
+            <tr>
+              <th>#</th><th>Original</th><th>Current</th><th>Similarity</th>
+              <th>Other choices</th><th></th>
+            </tr>
           </thead>
           <tbody></tbody>
         </table>

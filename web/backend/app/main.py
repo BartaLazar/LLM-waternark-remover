@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from synreplace import __version__ as synreplace_version
 from synreplace.corpora import ensure_corpora
+from synreplace.tokens import detokenize
 
 from . import schemas, service
 
@@ -82,7 +83,7 @@ def rewrite_text(payload: schemas.RewriteRequest) -> schemas.RewriteResponse:
     `payload.text` is never blank here: `RewriteRequest`'s own validator
     already rejects empty/whitespace-only text with a 422 before this body runs.
     """
-    result, replacements = service.process_rewrite(
+    tokens, replacements = service.process_rewrite(
         text=payload.text,
         every=payload.every,
         slide=payload.slide,
@@ -90,10 +91,39 @@ def rewrite_text(payload: schemas.RewriteRequest) -> schemas.RewriteResponse:
         threshold=payload.threshold,
         allow_multiword=payload.allow_multiword,
     )
+
+    out_replacements = [
+        schemas.Replacement(
+            position=item.position,
+            original=item.original,
+            replacement=item.replacement,
+            similarity=item.similarity,
+            alternatives=[
+                schemas.Alternative(word=alt.word, similarity=alt.similarity)
+                for alt in item.alternatives
+            ],
+        )
+        for item in replacements
+    ]
+
+    out_tokens = []
+    word_ordinal = 0
+    for token in tokens:
+        if token.is_word:
+            word_ordinal += 1
+        out_tokens.append(
+            schemas.TextToken(
+                text=token.text,
+                is_word=token.is_word,
+                position=word_ordinal if token.is_word else None,
+            )
+        )
+
     return schemas.RewriteResponse(
-        result=result,
-        replacements=[schemas.Replacement(**item.__dict__) for item in replacements],
+        result=detokenize(tokens),
+        replacements=out_replacements,
         substitution_count=len(replacements),
+        tokens=out_tokens,
     )
 
 

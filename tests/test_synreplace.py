@@ -1,6 +1,6 @@
 import unittest
 
-from synreplace import rewrite
+from synreplace import rewrite, rewrite_tokens
 from synreplace.corpora import ensure_corpora
 from synreplace.inflect import add_ed, add_ing, add_s, match_case
 from synreplace.synonyms import SynonymFinder
@@ -164,6 +164,44 @@ class TestSynonymFinder(unittest.TestCase):
         self.assertEqual(self.finder.find("researchers", "NNS"), ("investigators", 1.0))
         self.assertEqual(self.finder.find("difficult", "JJ"), ("hard", 1.0))
 
+    def test_zero_change_verbs_keep_their_unchanged_past_tense(self):
+        # WordNet's own exception files don't cover this verb class (past
+        # tense identical to the base form), so the regular guess ("cutted")
+        # would otherwise slip through unvetoed. Unlike a normal irregular
+        # verb ("go" -> "went", spelling unknown to us), here the correct
+        # form is known with certainty: the lemma itself.
+        for word in ["cut", "hit", "put", "shut", "hurt", "cost", "set", "burst", "spread"]:
+            self.assertEqual(self.finder._inflect(word, "v", "ed"), word)
+        # Dialectal cases with a genuine regular alternative are untouched.
+        self.assertEqual(self.finder._inflect("quit", "v", "ed"), "quitted")
+
+    def test_multiword_candidates_inflect_the_right_word(self):
+        # "set up" + "ed" naively appended gives "set uped". English phrasal
+        # verbs put the particle after the verb, so the verb (first word)
+        # inflects, not the whole phrase.
+        self.assertEqual(self.finder._inflect("set up", "v", "ed"), "set up")
+        self.assertEqual(self.finder._inflect("back up", "v", "ed"), "backed up")
+        self.assertEqual(self.finder._inflect("back up", "v", "ing"), "backing up")
+        # Compound nouns put the head noun last, so that's what pluralizes.
+        self.assertEqual(self.finder._inflect("high school", "n", "s"), "high schools")
+
+    def test_find_top_winner_matches_find(self):
+        finder = SynonymFinder(senses=3, threshold=0.3)
+        for word, tag in [("dog", "NN"), ("difficult", "JJ"), ("researchers", "NNS")]:
+            self.assertEqual(finder.find_top(word, tag)[0], finder.find(word, tag))
+
+    def test_find_top_respects_limit_and_excludes_the_winner(self):
+        finder = SynonymFinder(senses=3, threshold=0.3)
+        results = finder.find_top("difficult", "JJ", limit=2)
+        self.assertLessEqual(len(results), 2)
+        winner = results[0]
+        self.assertNotIn(winner, results[1:])
+
+    def test_find_top_returns_empty_list_not_none_when_nothing_qualifies(self):
+        finder = SynonymFinder()
+        self.assertEqual(finder.find_top("the", "DT"), [])
+        self.assertEqual(finder.find_top("Paris", "NNP"), [])
+
     def test_default_threshold_is_a_no_op_at_senses_1(self):
         # A word's primary sense is always 100% similar to itself, so the
         # default threshold can never reject anything when senses=1.
@@ -214,14 +252,23 @@ class TestRewrite(unittest.TestCase):
         ensure_corpora(quiet=True)
 
     def test_only_targeted_positions_change(self):
-        result, replacements = rewrite(SAMPLE, every=3)
+        result, replacements = rewrite(SAMPLE, every=4)
         original_words = [t.text for t in tokenize(SAMPLE) if t.is_word]
         result_words = [t.text for t in tokenize(result) if t.is_word]
         self.assertEqual(len(original_words), len(result_words))
         changed = {i for i, (a, b) in enumerate(zip(original_words, result_words), 1) if a != b}
         self.assertEqual(changed, {r.position for r in replacements})
+        self.assertTrue(changed, "test input produced no substitutions to check")
         for position in changed:
-            self.assertEqual(position % 3, 0, "changed a word off the N-grid")
+            # The grid starts at word 1, not word `every`: 1, 1+every, 1+2*every, ...
+            self.assertEqual((position - 1) % 4, 0, "changed a word off the N-grid")
+
+    def test_grid_starts_at_the_first_word(self):
+        # word 1 is always attempted, regardless of `every` -- not word
+        # `every` like a naive "every Nth word, 1-indexed from N" would give.
+        result, replacements = rewrite("quick brown fox jumps here", every=5)
+        self.assertEqual(result, "speedy brown fox jumps here")
+        self.assertEqual([r.position for r in replacements], [1])
 
     def test_slide_finds_more_substitutions(self):
         _, strict = rewrite(SAMPLE, every=3)
@@ -272,6 +319,33 @@ class TestRewrite(unittest.TestCase):
     def test_rejects_invalid_interval(self):
         with self.assertRaises(ValueError):
             rewrite(SAMPLE, every=0)
+
+    def test_rewrite_tokens_reconstructs_the_same_text_as_rewrite(self):
+        expected_text, expected_replacements = rewrite(SAMPLE, every=1, slide=True, threshold=0.3)
+        tokens, replacements = rewrite_tokens(SAMPLE, every=1, slide=True, threshold=0.3)
+        self.assertEqual(detokenize(tokens), expected_text)
+        self.assertEqual(
+            [(r.position, r.original, r.replacement) for r in replacements],
+            [(r.position, r.original, r.replacement) for r in expected_replacements],
+        )
+
+    def test_rewrite_tokens_word_tokens_carry_a_matching_position(self):
+        tokens, replacements = rewrite_tokens(SAMPLE, every=1, slide=True, threshold=0.3)
+        word_tokens = [t for t in tokens if t.is_word]
+        self.assertEqual(len(word_tokens), len([t for t in tokenize(SAMPLE) if t.is_word]))
+        # Replacement.position is a 1-based ordinal into just the word tokens.
+        for replacement in replacements:
+            self.assertEqual(word_tokens[replacement.position - 1].text, replacement.replacement)
+
+    def test_replacement_alternatives_are_capped_and_distinct_from_winner(self):
+        _, replacements = rewrite_tokens(SAMPLE, every=1, slide=True, senses=3, threshold=0.3)
+        seen_any_alternatives = False
+        for r in replacements:
+            self.assertLessEqual(len(r.alternatives), 3)
+            for alt in r.alternatives:
+                self.assertNotEqual(alt.word, r.replacement)
+                seen_any_alternatives = seen_any_alternatives or True
+        self.assertTrue(seen_any_alternatives, "expected at least one word to have alternatives")
 
 
 class TestCli(unittest.TestCase):

@@ -46,6 +46,15 @@ const els = {
   errorMessage: document.getElementById("error-message"),
 };
 
+// The last rewrite response's full token list (words + the gaps between
+// them), kept client-side so a Reset/alternative click can edit one word and
+// rebuild the result text without re-implementing word-boundary detection --
+// mirrors the API's `tokens` field 1:1. See web/docs/API.md.
+let currentTokens = [];
+
+// The <span class="result-word"> currently highlighted by jumpToWord(), if any.
+let highlightedWord = null;
+
 function setStatus(message) {
   els.status.textContent = message;
 }
@@ -74,27 +83,152 @@ function hideError() {
 
 function renderResult(data) {
   els.resultPanel.hidden = false;
-  els.result.value = data.result;
+  currentTokens = data.tokens.map((t) => ({ ...t }));
+  highlightedWord = null;
+  renderResultWords();
   els.substitutionsHeading.textContent =
     data.substitution_count + " substitution" + (data.substitution_count === 1 ? "" : "s");
 
   els.substitutionsBody.innerHTML = "";
   for (const item of data.replacements) {
-    const row = document.createElement("tr");
-    const similarityPct = Math.round(item.similarity * 100) + "%";
-    row.innerHTML =
-      "<td>" + item.position + "</td>" +
-      "<td>" + escapeHtml(item.original) + "</td>" +
-      "<td>" + escapeHtml(item.replacement) + "</td>" +
-      "<td>" + similarityPct + "</td>";
-    els.substitutionsBody.appendChild(row);
+    els.substitutionsBody.appendChild(buildSubstitutionRow(item));
   }
 }
 
-function escapeHtml(value) {
-  const div = document.createElement("div");
-  div.textContent = value;
-  return div.innerHTML;
+// Renders currentTokens into #result as one <span class="result-word"> per
+// word (gaps are plain text nodes), so a specific word can later get a real,
+// persistent highlight -- see jumpToWord().
+function renderResultWords() {
+  els.result.innerHTML = "";
+  for (const token of currentTokens) {
+    if (token.is_word) {
+      const span = document.createElement("span");
+      span.className = "result-word";
+      span.dataset.position = token.position;
+      span.textContent = token.text;
+      els.result.appendChild(span);
+    } else {
+      els.result.appendChild(document.createTextNode(token.text));
+    }
+  }
+}
+
+function currentResultText() {
+  return currentTokens.map((t) => t.text).join("");
+}
+
+function similarityLabel(similarity) {
+  return similarity == null ? "—" : Math.round(similarity * 100) + "%";
+}
+
+function cell(text) {
+  const td = document.createElement("td");
+  td.textContent = text;
+  return td;
+}
+
+// One row per substitution: the original word, the word currently applied at
+// that position (editable via the buttons below), its similarity, up to
+// ALTERNATIVES_LIMIT alternative-synonym chips, and a Reset-to-original button.
+function buildSubstitutionRow(item) {
+  const row = document.createElement("tr");
+  row.dataset.position = item.position;
+
+  const currentCell = document.createElement("td");
+  currentCell.className = "current-cell";
+  const wordLink = document.createElement("button");
+  wordLink.type = "button";
+  wordLink.className = "word-link";
+  wordLink.textContent = item.replacement;
+  wordLink.title = "Find this word in the result";
+  wordLink.addEventListener("click", () => jumpToWord(item.position));
+  currentCell.appendChild(wordLink);
+  const similarityCell = cell(similarityLabel(item.similarity));
+  similarityCell.className = "similarity-cell";
+
+  row.appendChild(cell(String(item.position)));
+  row.appendChild(cell(item.original));
+  row.appendChild(currentCell);
+  row.appendChild(similarityCell);
+
+  const altCell = document.createElement("td");
+  altCell.className = "alternatives-cell";
+  const chips = [];
+  if (item.alternatives.length === 0) {
+    // A td with no content at all doesn't establish a normal text baseline,
+    // so `vertical-align: baseline` computes a slightly different (shorter)
+    // row height for it than for a sibling row whose alternatives cell holds
+    // a real chip -- rows drift out of alignment by a pixel or two. An
+    // invisible placeholder with the exact same tag (a <button>, not a
+    // <span> -- a plain span is inline by default and its vertical padding
+    // doesn't expand the line box the way a button's does) has identical box
+    // metrics to a real chip, so every row's baseline math matches
+    // regardless of whether it has alternatives to show.
+    const placeholder = document.createElement("button");
+    placeholder.type = "button";
+    placeholder.className = "chip chip-placeholder";
+    placeholder.textContent = "—";
+    placeholder.disabled = true;
+    placeholder.setAttribute("aria-hidden", "true");
+    altCell.appendChild(placeholder);
+  }
+  for (const alt of item.alternatives) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip";
+    chip.textContent = alt.word + " " + similarityLabel(alt.similarity);
+    chip.addEventListener("click", () => applyChoice(row, item, alt.word, alt.similarity, chip, chips));
+    chips.push(chip);
+    altCell.appendChild(chip);
+  }
+  row.appendChild(altCell);
+
+  const actionCell = document.createElement("td");
+  const resetBtn = document.createElement("button");
+  resetBtn.type = "button";
+  resetBtn.className = "secondary reset-btn";
+  resetBtn.title = "Reset to the original word";
+  resetBtn.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round" class="icon">' +
+    '<path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" /></svg>Reset';
+  resetBtn.addEventListener("click", () => applyChoice(row, item, item.original, null, null, chips));
+  actionCell.appendChild(resetBtn);
+  row.appendChild(actionCell);
+
+  return row;
+}
+
+// Sets `word` as the currently-applied text at `item.position`, updates that
+// word's span in the result view in place, and updates this row's
+// "Current"/"Similarity" cells and which chip (if any) is marked active.
+function applyChoice(row, item, word, similarity, activeChip, allChips) {
+  const token = currentTokens.find((t) => t.is_word && t.position === item.position);
+  if (token) token.text = word;
+  const span = resultWordSpan(item.position);
+  if (span) span.textContent = word;
+
+  row.querySelector(".word-link").textContent = word;
+  row.querySelector(".similarity-cell").textContent = similarityLabel(similarity);
+  row.classList.toggle("is-reset", word === item.original);
+  for (const chip of allChips) chip.classList.toggle("active", chip === activeChip);
+}
+
+function resultWordSpan(position) {
+  return els.result.querySelector('.result-word[data-position="' + position + '"]');
+}
+
+// Gives that word's span in the result view a real, persistent highlight
+// (clearing any previous one) and scrolls it to the center of the box --
+// more visible and more reliable than a native text selection, which is easy
+// to lose among 500 words and disappears the moment focus moves elsewhere.
+function jumpToWord(position) {
+  const span = resultWordSpan(position);
+  if (!span) return;
+  if (highlightedWord) highlightedWord.classList.remove("highlight");
+  span.classList.add("highlight");
+  highlightedWord = span;
+  span.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 async function rewrite() {
@@ -145,7 +279,7 @@ async function rewrite() {
 
 async function copyResult() {
   try {
-    await navigator.clipboard.writeText(els.result.value);
+    await navigator.clipboard.writeText(currentResultText());
     setStatus("Copied to clipboard.");
     setTimeout(() => setStatus(""), 1500);
   } catch (err) {
@@ -154,7 +288,7 @@ async function copyResult() {
 }
 
 function downloadResult() {
-  const blob = new Blob([els.result.value], { type: "text/plain;charset=utf-8" });
+  const blob = new Blob([currentResultText()], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

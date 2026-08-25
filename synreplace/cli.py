@@ -43,7 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("text", nargs="*", help="text to rewrite (optional)")
     parser.add_argument(
         "-n", "--every", type=int, default=5, metavar="N",
-        help="replace every N-th word (default: 5)",
+        help="replace the first word, then every N-th word after it (default: 5)",
     )
     parser.add_argument("-i", "--input", metavar="FILE", help="read text from FILE")
     parser.add_argument(
