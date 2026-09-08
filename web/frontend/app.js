@@ -389,9 +389,48 @@ function buildCard(item) {
 
 // Sets `word` as the currently-applied text at `item.position`, re-renders
 // every view from the updated tokens, and updates this card's own display.
+// Words cmudict would call a consonant sound despite a leading vowel letter
+// ("university" starts like "y"), or a vowel sound despite a leading
+// consonant letter ("hour" has a silent h) -- the same exceptions the
+// server's pronunciation-based check (synreplace.inflect.starts_with_vowel_sound)
+// catches for free. This client-side fallback (used only when Reset/an
+// alternative swaps a word in without a server round-trip) has no
+// pronunciation data to work from, so it hard-codes the common ones instead.
+const VOWEL_SOUND_EXCEPTIONS = new Set([
+  "university", "universal", "unique", "unicorn", "unicycle", "uniform",
+  "union", "unit", "united", "unanimous", "usual", "user", "useful",
+  "utility", "utopia", "european", "eucalyptus", "euro", "one", "once",
+]);
+const CONSONANT_LETTER_VOWEL_SOUND = new Set(["hour", "honest", "honor", "honour", "heir", "herb"]);
+
+function wordStartsWithVowelSound(text) {
+  const word = (text.split(/\s+/)[0] || "").toLowerCase();
+  if (CONSONANT_LETTER_VOWEL_SOUND.has(word)) return true;
+  if (VOWEL_SOUND_EXCEPTIONS.has(word)) return false;
+  return /^[aeiou]/.test(word);
+}
+
+function fixArticle(article, followingText) {
+  const correct = wordStartsWithVowelSound(followingText) ? "an" : "a";
+  if (article === article.toUpperCase() && article.length > 1) return correct.toUpperCase();
+  if (/[A-Z]/.test(article[0])) return correct[0].toUpperCase() + correct.slice(1);
+  return correct;
+}
+
+function wordTokenAtPosition(position) {
+  return currentTokens.find((t) => t.is_word && t.position === position);
+}
+
 function applyChoice(card, item, word, similarity, activeChip, allChips) {
-  const token = currentTokens.find((t) => t.is_word && t.position === item.position);
+  const token = wordTokenAtPosition(item.position);
   if (token) token.text = word;
+  // Mirrors the same fix the server applies on the initial rewrite (see
+  // synreplace.rewrite.rewrite_tokens) -- a Reset/alternative swap can just
+  // as easily change whether the word now starts with a vowel sound.
+  const articleToken = wordTokenAtPosition(item.position - 1);
+  if (articleToken && ["a", "an"].includes(articleToken.text.toLowerCase())) {
+    articleToken.text = fixArticle(articleToken.text, token ? token.text : word);
+  }
   renderAllViews();
 
   card.querySelector(".word-link").textContent = word;

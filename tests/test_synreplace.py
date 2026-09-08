@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from synreplace import rewrite, rewrite_tokens
 from synreplace.corpora import ensure_corpora
-from synreplace.inflect import add_ed, add_ing, add_s, match_case
+from synreplace.inflect import add_ed, add_ing, add_s, fix_article, match_case, starts_with_vowel_sound
 from synreplace.online import DatamuseSource, DictionaryApiSource
 from synreplace.sources import CompositeSource, SOURCE_NAMES, make_source
 from synreplace.synonyms import SynonymFinder
@@ -137,6 +137,34 @@ class TestInflect(unittest.TestCase):
         self.assertEqual(match_case("dog", "hound"), "hound")
         self.assertEqual(match_case("A", "one"), "One")
 
+    def test_starts_with_vowel_sound_uses_pronunciation_not_spelling(self):
+        self.assertTrue(starts_with_vowel_sound("hour"))  # silent h
+        self.assertTrue(starts_with_vowel_sound("individual"))
+        self.assertFalse(starts_with_vowel_sound("university"))  # spelled with u, sounds like "y"
+        self.assertFalse(starts_with_vowel_sound("one"))  # sounds like "w"
+        self.assertFalse(starts_with_vowel_sound("single"))
+
+    def test_starts_with_vowel_sound_checks_only_the_first_word_of_a_phrase(self):
+        self.assertTrue(starts_with_vowel_sound("individual choice"))
+        self.assertFalse(starts_with_vowel_sound("single handedly"))
+
+    def test_starts_with_vowel_sound_falls_back_to_spelling_for_unknown_words(self):
+        # Not real words, so not in cmudict -- falls back to the first letter.
+        self.assertTrue(starts_with_vowel_sound("orblexis"))
+        self.assertFalse(starts_with_vowel_sound("zorblex"))
+
+    def test_fix_article_flips_a_and_an_as_needed(self):
+        self.assertEqual(fix_article("a", "individual"), "an")
+        self.assertEqual(fix_article("an", "single"), "a")
+
+    def test_fix_article_preserves_case(self):
+        self.assertEqual(fix_article("A", "individual"), "An")
+        self.assertEqual(fix_article("An", "single"), "A")
+
+    def test_fix_article_leaves_an_already_correct_article_unchanged(self):
+        self.assertEqual(fix_article("A", "single"), "A")
+        self.assertEqual(fix_article("An", "individual"), "An")
+
 
 class TestSynonymFinder(unittest.TestCase):
     @classmethod
@@ -249,10 +277,54 @@ class TestSynonymFinder(unittest.TestCase):
         self.assertAlmostEqual(similarity, 0.631578947368421)
 
 
+class _WordMapFinder:
+    """A fake finder that only "knows" a synonym for the exact words given it
+    (case-sensitive on purpose -- callers pass the word's own casing), so a
+    test can force one specific substitution in a hand-written sentence
+    without depending on WordNet's actual choice for that word."""
+
+    def __init__(self, mapping):
+        self._mapping = mapping
+
+    def find_top(self, word, tag, limit=4):
+        return self._mapping.get(word, [])[:limit]
+
+
 class TestRewrite(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         ensure_corpora(quiet=True)
+
+    def test_article_flips_to_an_before_a_vowel_sounding_replacement(self):
+        finder = _WordMapFinder({"single": [("individual", 1.0)]})
+        result, _ = rewrite("A single discovery matters here today.", every=1, slide=True, finder=finder)
+        self.assertEqual(result, "An individual discovery matters here today.")
+
+    def test_article_flips_to_a_before_a_consonant_sounding_replacement(self):
+        finder = _WordMapFinder({"individual": [("single", 1.0)]})
+        result, _ = rewrite("An individual discovery matters here today.", every=1, slide=True, finder=finder)
+        self.assertEqual(result, "A single discovery matters here today.")
+
+    def test_article_fix_uses_pronunciation_not_spelling(self):
+        # "university" is spelled with a leading vowel but sounds like "y" --
+        # the naive letter-based check would wrongly produce "an university".
+        finder = _WordMapFinder({"school": [("university", 1.0)]})
+        result, _ = rewrite("A school trip starts soon.", every=1, slide=True, finder=finder)
+        self.assertEqual(result, "A university trip starts soon.")
+        # "hour" has a silent h, a consonant letter with a vowel sound.
+        finder = _WordMapFinder({"meeting": [("hour", 1.0)]})
+        result, _ = rewrite("A meeting starts soon.", every=1, slide=True, finder=finder)
+        self.assertEqual(result, "An hour starts soon.")
+
+    def test_article_left_alone_when_already_correct(self):
+        finder = _WordMapFinder({"quick": [("swift", 1.0)]})
+        result, _ = rewrite("A quick fox runs.", every=1, slide=True, finder=finder)
+        self.assertEqual(result, "A swift fox runs.")
+
+    def test_article_fix_is_not_recorded_as_its_own_replacement(self):
+        finder = _WordMapFinder({"single": [("individual", 1.0)]})
+        _, replacements = rewrite("A single discovery matters here today.", every=1, slide=True, finder=finder)
+        self.assertEqual([r.original for r in replacements], ["single"])
 
     def test_only_targeted_positions_change(self):
         result, replacements = rewrite(SAMPLE, every=4)

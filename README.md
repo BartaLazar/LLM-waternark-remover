@@ -41,9 +41,12 @@ The speedy brown fox leaps over the lazy dog while the investigators carefully e
   out byte-identical; only the targeted words change.
 - **Grammatically correct substitutions.** A replacement is re-conjugated,
   re-pluralized and re-capitalized to match the original word's form —
-  `expressed` → `evinced`, `Researchers` → `Investigators` — and a candidate
-  that would need an irregular form nobody can spell reliably (`go` → `goed`)
-  is skipped rather than guessed at wrong.
+  `expressed` → `evinced`, `Researchers` → `Investigators` — a preceding
+  `a`/`an` is fixed if the replacement changes which one belongs (`a single
+  discovery` → `an individual discovery`, decided from pronunciation, not
+  spelling, so `a university` and `an hour` both still come out right) — and
+  a candidate that would need an irregular form nobody can spell reliably
+  (`go` → `goed`) is skipped rather than guessed at wrong.
 - **Two free online sources, opt-in.** Datamuse and the Free Dictionary API,
   neither needing a key or signup, usable alone or pooled together with
   WordNet — see [Synonym sources](#synonym-sources).
