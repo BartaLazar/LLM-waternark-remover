@@ -31,15 +31,17 @@ class RewriteRequest(BaseModel):
     )
     senses: int = Field(
         3, ge=1,
-        description="Consider the K closest WordNet senses of a word, not "
-                     "just its single most common one.",
+        description="Consider the K closest senses of a word, not just its "
+                     "single most common one. Applies to every enabled "
+                     "source, reinterpreted per source -- see "
+                     "docs/API.md#synonym-sources.",
     )
     threshold: float = Field(
         0.95, ge=0.0, le=1.0,
         description="Minimum similarity (0-1) a non-dominant sense must "
                      "have to the word's dominant sense to be used; 0 "
-                     "disables the check. Only matters when senses > 1, "
-                     "which is the default.",
+                     "disables the check. Applies to every enabled source; "
+                     "only matters when senses > 1, which is the default.",
     )
     allow_multiword: bool = Field(
         False,
@@ -50,8 +52,11 @@ class RewriteRequest(BaseModel):
         description="One or more synonym sources to use, by name (see "
                      "/info for the full list with descriptions). Naming "
                      "more than one pools their candidates together rather "
-                     "than picking one. senses/threshold only affect the "
-                     "'wordnet' source.",
+                     "than picking one. senses/threshold apply to every "
+                     "source, reinterpreted per source since only 'wordnet' "
+                     "has a native notion of word senses -- see "
+                     "docs/API.md#synonym-sources for what they mean "
+                     "for each one.",
         examples=[["wordnet"], ["wordnet", "datamuse"]],
     )
 

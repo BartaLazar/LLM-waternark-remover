@@ -269,9 +269,26 @@ one to use.
 | --- | --- | --- |
 | `wordnet` | Offline WordNet lookup (the default) | No |
 | `datamuse` | [Datamuse](https://www.datamuse.com/api/), built specifically for word-relation queries; returns a relevance score per candidate | Yes |
-| `dictionaryapi` | [Free Dictionary API](https://dictionaryapi.dev/), a definitions API with synonyms as a secondary field; coverage varies a lot by word, and it reports no per-candidate score (every candidate shows `similarity: 1.0`) | Yes |
+| `dictionaryapi` | [Free Dictionary API](https://dictionaryapi.dev/), a definitions API with synonyms as a secondary field; coverage varies a lot by word | Yes |
 
-Trade-offs worth knowing:
+**`senses`/`threshold` apply to every enabled source**, each reinterpreting
+them for its own shape of data:
+
+- **`wordnet`**: real, measured semantic distance (Wu-Palmer score).
+- **`datamuse`**: `senses` caps how far down Datamuse's own relevance-ranked
+  list is searched (its top hit stands in for "the dominant sense");
+  `threshold` drops any candidate whose score, normalized against that top
+  hit, falls below it. Datamuse doesn't disambiguate word senses at all, so
+  it can still occasionally surface a synonym for the wrong meaning of a word
+  if a wrong-meaning result happens to score close to the top one.
+- **`dictionaryapi`**: this API's response is naturally grouped into one
+  entry per meaning of the word, in the order it lists them (its own implicit
+  "most common first"). `senses` caps how many meaning-entries are searched;
+  every candidate from the first one scores `1.0`, every candidate from a
+  later one scores a flat `0.5` — not a measured relatedness value like
+  WordNet's, since this API doesn't expose anything to compute one from.
+
+Other trade-offs worth knowing:
 
 - **Latency.** Each distinct word costs one HTTP request per online source
   (cached per source instance for the process's lifetime, so a repeated word
@@ -279,15 +296,11 @@ Trade-offs worth knowing:
   request rather than erroring it out — a source that fails just contributes
   no candidates for that request, and prints a one-time note to the server's
   stderr the first time that happens.
-- **`senses`/`threshold` only affect `wordnet`.** The online APIs have no
-  notion of "the word's Kth-closest sense" — Datamuse in particular doesn't
-  disambiguate senses at all, so it can surface a synonym for the wrong
-  meaning of a word in a way `threshold` can't filter for that source.
 - **`similarity` isn't on the same scale across sources.** WordNet's is a
   graph-distance score, Datamuse's is a normalized relevance score, and
-  `dictionaryapi`'s is a fixed `1.0` for every candidate. All three are
-  reported as a `0.0`–`1.0` float for a consistent shape, but the numbers
-  aren't measuring the same thing.
+  `dictionaryapi`'s is one of two fixed values. All three are reported as a
+  `0.0`–`1.0` float for a consistent shape, but the numbers aren't measuring
+  the same thing.
 
 ## Error format
 

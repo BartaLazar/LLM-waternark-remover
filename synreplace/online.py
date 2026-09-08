@@ -82,13 +82,22 @@ class DatamuseSource:
     different *metric* from WordNet's Wu-Palmer score (co-occurrence
     statistics, not graph distance) but the same 0-1 shape, so it displays
     the same way.
+
+    `senses`/`threshold` mean the same thing here as for `SynonymFinder`,
+    reinterpreted for a source with no explicit sense groupings of its own:
+    `senses` caps how far down Datamuse's own relevance-ranked list we're
+    willing to look (its top result is always the "dominant sense" analog),
+    and `threshold` drops any candidate whose score, normalized against that
+    top result, falls below it.
     """
 
     # Our internal POS code -> Datamuse's "md=p" part-of-speech tag.
     _DATAMUSE_POS = {"n": "n", "v": "v", "a": "adj", "r": "adv"}
 
-    def __init__(self, allow_multiword: bool = False) -> None:
+    def __init__(self, senses: int = 3, allow_multiword: bool = False, threshold: float = 0.95) -> None:
+        self.senses = max(1, senses)
         self.allow_multiword = allow_multiword
+        self.threshold = threshold
         self.inflector = Inflector()
         self._cache: Dict[str, List[Tuple[str, float, Tuple[str, ...]]]] = {}
         self._warn = _WarnOnce()
@@ -106,13 +115,26 @@ class DatamuseSource:
         if lemma is None:
             return []
 
+        raw = self._query(lemma)
+        if not raw:
+            return []
+        top_score = raw[0][1] or 1.0  # Datamuse's own top score for this word; the "1.0" anchor
+
+        # POS-filter *before* capping to `senses` -- Datamuse doesn't support
+        # filtering server-side the way WordNet's synsets(lemma, pos=pos)
+        # does, so doing it in the wrong order here would let an early
+        # wrong-POS result crowd out a later correct one, unlike WordNet
+        # where the POS filter always happens before the senses-slice.
         wanted_tag = self._DATAMUSE_POS[pos]
+        pos_filtered = [item for item in raw if not item[2] or wanted_tag in item[2]]
+
         scored: List[Tuple[str, float]] = []
         seen_inflected = {word.lower()}
-        for candidate, score, tags in self._query(lemma):
-            # Datamuse sometimes returns a result with no POS tags at all;
-            # be permissive there rather than discarding it outright.
-            if tags and wanted_tag not in tags:
+        # Only look as far down Datamuse's own ranking as `senses` allows --
+        # same role `synsets[:self.senses]` plays for SynonymFinder.
+        for candidate, score, _tags in pos_filtered[: self.senses]:
+            similarity = min(1.0, score / top_score)
+            if self.threshold > 0 and similarity < self.threshold:
                 continue
             normalized = candidate.lower()
             if not _candidate_ok(normalized, lemma, self.allow_multiword):
@@ -121,14 +143,11 @@ class DatamuseSource:
             if inflected is None or inflected in seen_inflected:
                 continue
             seen_inflected.add(inflected)
-            scored.append((inflected, score))
+            scored.append((inflected, similarity))
             if len(scored) >= limit:
                 break
 
-        if not scored:
-            return []
-        top_score = scored[0][1] or 1.0
-        return [(candidate, min(1.0, score / top_score)) for candidate, score in scored]
+        return scored
 
     def _query(self, lemma: str) -> List[Tuple[str, float, Tuple[str, ...]]]:
         """(word, score, pos-tags) for `lemma`, ranked best-first by Datamuse
@@ -160,17 +179,27 @@ class DictionaryApiSource:
     free, no key or signup. It's a definitions API with synonyms as a
     secondary field per sense, not a dedicated synonym endpoint, so coverage
     varies a lot by word: some senses list a dozen synonyms, others none at
-    all. It also reports no relevance score, so every candidate here shares
-    one fixed similarity rather than a per-candidate ranking.
+    all. It reports no relevance score, but its response *is* naturally
+    grouped into one entry per meaning of the word, in the order the API
+    lists them (its own implicit "most common first" ordering) -- so unlike
+    Datamuse, `senses`/`threshold` map onto real structure here rather than
+    a stand-in for one: `senses` caps how many of those meaning-entries (for
+    the wanted part of speech) are searched, and every candidate from the
+    first one scores 1.0 (the "dominant sense") while candidates from any
+    later one score `NON_DOMINANT_SIMILARITY` -- a flat marked-down value,
+    not a measured relatedness like WordNet's Wu-Palmer score, since this API
+    doesn't expose anything to actually measure that with.
     """
 
     _DICT_POS = {"n": "noun", "v": "verb", "a": "adjective", "r": "adverb"}
-    FIXED_SIMILARITY = 1.0  # no per-candidate score to report; see class docstring
+    NON_DOMINANT_SIMILARITY = 0.5
 
-    def __init__(self, allow_multiword: bool = False) -> None:
+    def __init__(self, senses: int = 3, allow_multiword: bool = False, threshold: float = 0.95) -> None:
+        self.senses = max(1, senses)
         self.allow_multiword = allow_multiword
+        self.threshold = threshold
         self.inflector = Inflector()
-        self._cache: Dict[str, List[Tuple[str, str]]] = {}
+        self._cache: Dict[str, List[Tuple[str, List[str]]]] = {}
         self._warn = _WarnOnce()
 
     def find(self, word: str, tag: str) -> Optional[Tuple[str, float]]:
@@ -187,29 +216,42 @@ class DictionaryApiSource:
             return []
 
         wanted_pos = self._DICT_POS[pos]
+        # Same order as SynonymFinder: filter to the matching part of speech
+        # first, *then* cap to `senses` -- so the cap always keeps the K
+        # meanings the API considers most relevant to this word, the same
+        # way synsets(lemma, pos=pos)[:senses] does for WordNet.
+        matching_meanings = [
+            synonyms for entry_pos, synonyms in self._query(lemma) if entry_pos == wanted_pos
+        ]
+
         results: List[Tuple[str, float]] = []
         seen_inflected = {word.lower()}
         seen_raw: set = set()
-        for entry_pos, synonym in self._query(lemma):
-            if entry_pos != wanted_pos or synonym in seen_raw:
+        for meaning_index, synonyms in enumerate(matching_meanings[: self.senses]):
+            similarity = 1.0 if meaning_index == 0 else self.NON_DOMINANT_SIMILARITY
+            if self.threshold > 0 and similarity < self.threshold:
                 continue
-            seen_raw.add(synonym)
-            normalized = synonym.lower()
-            if not _candidate_ok(normalized, lemma, self.allow_multiword):
-                continue
-            inflected = self.inflector.inflect(normalized, pos, form)
-            if inflected is None or inflected in seen_inflected:
-                continue
-            seen_inflected.add(inflected)
-            results.append((inflected, self.FIXED_SIMILARITY))
-            if len(results) >= limit:
-                break
+            for synonym in synonyms:
+                if synonym in seen_raw:
+                    continue
+                seen_raw.add(synonym)
+                normalized = synonym.lower()
+                if not _candidate_ok(normalized, lemma, self.allow_multiword):
+                    continue
+                inflected = self.inflector.inflect(normalized, pos, form)
+                if inflected is None or inflected in seen_inflected:
+                    continue
+                seen_inflected.add(inflected)
+                results.append((inflected, similarity))
+                if len(results) >= limit:
+                    return results
         return results
 
-    def _query(self, lemma: str) -> List[Tuple[str, str]]:
-        """(part-of-speech, synonym) pairs for every sense of `lemma`, cached
-        per lemma (not per part-of-speech) so looking the same lemma up as
-        two different word classes still costs one request per run."""
+    def _query(self, lemma: str) -> List[Tuple[str, List[str]]]:
+        """(part-of-speech, synonyms) for every meaning of `lemma`, one entry
+        per meaning in the API's own order -- cached per lemma (not per part
+        of speech) so looking the same lemma up as two different word
+        classes still costs one request per run."""
         if lemma in self._cache:
             return self._cache[lemma]
         url = "https://api.dictionaryapi.dev/api/v2/entries/en/" + urllib.parse.quote(lemma)
@@ -218,14 +260,13 @@ class DictionaryApiSource:
             self._warn("Free Dictionary API request failed or timed out; "
                        "some words may come back with no synonyms.")
             data = []
-        pairs: List[Tuple[str, str]] = []
+        meanings: List[Tuple[str, List[str]]] = []
         for entry in data:
             for meaning in entry.get("meanings", []):
                 entry_pos = meaning.get("partOfSpeech", "")
-                for synonym in meaning.get("synonyms") or []:
-                    pairs.append((entry_pos, synonym))
+                synonyms = list(meaning.get("synonyms") or [])
                 for definition in meaning.get("definitions", []):
-                    for synonym in definition.get("synonyms") or []:
-                        pairs.append((entry_pos, synonym))
-        self._cache[lemma] = pairs
-        return pairs
+                    synonyms.extend(definition.get("synonyms") or [])
+                meanings.append((entry_pos, synonyms))
+        self._cache[lemma] = meanings
+        return meanings

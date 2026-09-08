@@ -141,25 +141,39 @@ source's candidates into one ranked list rather than picking exactly one:
 | --- | --- | --- |
 | `wordnet` | The default described above | No |
 | `datamuse` | [Datamuse](https://www.datamuse.com/api/), built specifically for word-relation queries; returns a relevance score per candidate | Yes |
-| `dictionaryapi` | [Free Dictionary API](https://dictionaryapi.dev/), a definitions API with synonyms as a secondary field; coverage varies a lot by word, and it reports no per-candidate score (every candidate shows a flat 100%) | Yes |
+| `dictionaryapi` | [Free Dictionary API](https://dictionaryapi.dev/), a definitions API with synonyms as a secondary field; coverage varies a lot by word | Yes |
 
 ```bash
 synreplace --sources wordnet,datamuse -v "the quick brown fox jumps over the lazy dog"
 ```
 
-Trade-offs worth knowing before reaching for the online sources:
+**`--senses`/`--threshold` apply to every enabled source**, each reinterpreting
+them for its own shape of data rather than ignoring them:
+
+- **`wordnet`**: as described above — real, measured semantic distance.
+- **`datamuse`**: `--senses` caps how far down Datamuse's own relevance-ranked
+  list is searched (its top hit is the "dominant sense" stand-in);
+  `--threshold` drops any candidate whose score, normalized against that top
+  hit, falls below it. Datamuse doesn't disambiguate word senses at all, so
+  even at the default this is a coarser signal than WordNet's — it can still
+  occasionally surface a synonym for the wrong meaning of a word (e.g. "fox"
+  the animal vs. "to fox someone" meaning to trick them) if a wrong-meaning
+  result happens to score close to the top one.
+- **`dictionaryapi`**: this API's response is naturally grouped into one
+  entry per meaning of the word, in the order it lists them (its own implicit
+  "most common first"). `--senses` caps how many of those meaning-entries are
+  searched; every candidate from the first one scores 100%, and every
+  candidate from a later one scores a flat 50% — not a measured relatedness
+  value like WordNet's, since this API doesn't expose anything to actually
+  compute one from.
+
+Other trade-offs worth knowing before reaching for the online sources:
 
 - **Speed and reliability.** Each distinct word costs one HTTP request (cached
   per run, so a repeated word is free the second time); a slow or unreachable
   API can add many seconds to a rewrite. A source that fails just contributes
   no candidates rather than erroring out the whole run — a one-time note is
   printed to stderr the first time that happens.
-- **`--senses` and `--threshold` only affect `wordnet`.** The online APIs have
-  no notion of "the word's Kth-closest sense" — Datamuse in particular
-  doesn't disambiguate senses at all, so it can occasionally surface a
-  synonym for the wrong meaning of a word (e.g. "fox" the animal vs. "to fox
-  someone" meaning to trick them) in a way `--threshold` can't filter for
-  that source.
 - **Similarity numbers aren't on the same scale across sources.** WordNet's is
   a graph-distance score, Datamuse's is a normalized relevance score, and
   `dictionaryapi`'s is a fixed 100% for every candidate (no ranking data is

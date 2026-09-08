@@ -511,14 +511,32 @@ class TestDatamuseSource(unittest.TestCase):
         ensure_corpora(quiet=True)
 
     def test_returns_candidates_ranked_and_normalized(self):
+        # threshold=0 and a wide senses cap isolate ranking/normalization
+        # from the (separately tested) threshold- and senses-filtering below.
         with patch("synreplace.online._get_json", return_value=DATAMUSE_HAPPY_ADJ):
-            source = DatamuseSource()
+            source = DatamuseSource(senses=10, threshold=0)
             results = source.find_top("happy", "JJ", limit=4)
         words = [w for w, _ in results]
         self.assertEqual(words, ["halcyon", "content", "bright", "joyful"])
         self.assertAlmostEqual(results[0][1], 1.0)  # top result always normalizes to 1.0
         self.assertTrue(all(0.0 <= sim <= 1.0 for _, sim in results))
         self.assertEqual(sorted((s for _, s in results), reverse=True), [s for _, s in results])
+
+    def test_threshold_drops_candidates_below_it(self):
+        # content=0.93, bright=0.71, joyful=0.54 (normalized) -- only the top
+        # result (always 1.0) clears a strict threshold.
+        with patch("synreplace.online._get_json", return_value=DATAMUSE_HAPPY_ADJ):
+            strict = DatamuseSource(threshold=0.95).find_top("happy", "JJ", limit=4)
+            loose = DatamuseSource(threshold=0).find_top("happy", "JJ", limit=4)
+        self.assertEqual([w for w, _ in strict], ["halcyon"])
+        self.assertGreater(len(loose), len(strict))
+
+    def test_senses_caps_how_far_down_the_ranking_is_searched(self):
+        with patch("synreplace.online._get_json", return_value=DATAMUSE_HAPPY_ADJ):
+            capped = DatamuseSource(senses=1, threshold=0).find_top("happy", "JJ", limit=4)
+            uncapped = DatamuseSource(senses=10, threshold=0).find_top("happy", "JJ", limit=4)
+        self.assertEqual([w for w, _ in capped], ["halcyon"])
+        self.assertGreater(len(uncapped), len(capped))
 
     def test_filters_out_wrong_part_of_speech(self):
         with patch("synreplace.online._get_json", return_value=DATAMUSE_HAPPY_ADJ):
@@ -555,9 +573,57 @@ class TestDictionaryApiSource(unittest.TestCase):
             results = source.find_top("happy", "JJ", limit=4)
         words = [w for w, _ in results]
         self.assertEqual(words, ["cheerful", "content", "delighted", "elated"])
-        # No per-candidate ranking is available from this API; every result
-        # shares the same fixed similarity.
-        self.assertTrue(all(sim == DictionaryApiSource.FIXED_SIMILARITY for _, sim in results))
+        # This fixture's only adjective meaning is the dominant (index 0)
+        # one, so every candidate from it scores 1.0.
+        self.assertTrue(all(sim == 1.0 for _, sim in results))
+
+    def test_candidates_from_a_later_meaning_score_lower(self):
+        two_meanings = [
+            {
+                "word": "cool",
+                "meanings": [
+                    {"partOfSpeech": "adjective", "definitions": [],
+                     "synonyms": ["chilly"]},
+                    {"partOfSpeech": "adjective", "definitions": [],
+                     "synonyms": ["stylish"]},
+                ],
+            }
+        ]
+        with patch("synreplace.online._get_json", return_value=two_meanings):
+            results = DictionaryApiSource(threshold=0).find_top("cool", "JJ", limit=4)
+        results_by_word = dict(results)
+        self.assertEqual(results_by_word["chilly"], 1.0)
+        self.assertEqual(results_by_word["stylish"], DictionaryApiSource.NON_DOMINANT_SIMILARITY)
+
+    def test_default_threshold_drops_non_dominant_meanings(self):
+        two_meanings = [
+            {
+                "word": "cool",
+                "meanings": [
+                    {"partOfSpeech": "adjective", "definitions": [], "synonyms": ["chilly"]},
+                    {"partOfSpeech": "adjective", "definitions": [], "synonyms": ["stylish"]},
+                ],
+            }
+        ]
+        with patch("synreplace.online._get_json", return_value=two_meanings):
+            strict = DictionaryApiSource().find_top("cool", "JJ", limit=4)
+            loose = DictionaryApiSource(threshold=0).find_top("cool", "JJ", limit=4)
+        self.assertEqual([w for w, _ in strict], ["chilly"])
+        self.assertEqual({w for w, _ in loose}, {"chilly", "stylish"})
+
+    def test_senses_caps_how_many_meanings_are_searched(self):
+        two_meanings = [
+            {
+                "word": "cool",
+                "meanings": [
+                    {"partOfSpeech": "adjective", "definitions": [], "synonyms": ["chilly"]},
+                    {"partOfSpeech": "adjective", "definitions": [], "synonyms": ["stylish"]},
+                ],
+            }
+        ]
+        with patch("synreplace.online._get_json", return_value=two_meanings):
+            capped = DictionaryApiSource(senses=1, threshold=0).find_top("cool", "JJ", limit=4)
+        self.assertEqual([w for w, _ in capped], ["chilly"])
 
     def test_network_failure_yields_empty_list_not_an_exception(self):
         with patch("synreplace.online._get_json", return_value=None):

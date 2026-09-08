@@ -24,7 +24,8 @@ sources (--sources NAME[,NAME...], default: wordnet):
   Naming more than one pools their candidates together rather than picking
   one -- e.g. --sources wordnet,datamuse considers both. The online sources
   need a network connection and are slower and less predictable than the
-  offline default; --senses/--threshold only affect wordnet.
+  offline default. --senses/--threshold apply to every enabled source, not
+  just wordnet -- see README.md for what they mean for each one.
 
 examples:
   synreplace -n 3 "the quick brown fox jumps over the lazy dog"

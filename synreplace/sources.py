@@ -68,9 +68,10 @@ def make_source(
 ) -> object:
     """Builds the source (or `CompositeSource` of several) for `names`.
 
-    `senses`/`threshold` only affect the `wordnet` source -- the online APIs
-    have no notion of "the word's Kth-closest sense", so those two
-    parameters are silently ignored when building `datamuse`/`dictionaryapi`.
+    `senses`/`threshold` apply to every source, not just `wordnet` -- each
+    online source reinterprets them for its own shape of data (see
+    `DatamuseSource`/`DictionaryApiSource`'s docstrings for what "sense" and
+    "similarity" mean for that particular one), rather than ignoring them.
     """
     names = list(dict.fromkeys(names))  # de-duplicate, keep first-seen order
     if not names:
@@ -86,8 +87,8 @@ def make_source(
         if name == "wordnet":
             built.append(SynonymFinder(senses=senses, allow_multiword=allow_multiword, threshold=threshold))
         elif name == "datamuse":
-            built.append(DatamuseSource(allow_multiword=allow_multiword))
+            built.append(DatamuseSource(senses=senses, allow_multiword=allow_multiword, threshold=threshold))
         else:  # "dictionaryapi"
-            built.append(DictionaryApiSource(allow_multiword=allow_multiword))
+            built.append(DictionaryApiSource(senses=senses, allow_multiword=allow_multiword, threshold=threshold))
 
     return built[0] if len(built) == 1 else CompositeSource(built)
