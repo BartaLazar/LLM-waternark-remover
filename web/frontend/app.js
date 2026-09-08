@@ -189,63 +189,135 @@ function renderCorrectionView(container) {
   }
 }
 
-// A gap token containing a blank line -- used to cut currentTokens into rows
-// at paragraph breaks, see splitIntoRows(). Coarser than cutting at every
-// sentence: a row can still wrap to a different number of lines in each
-// column internally, but a paragraph is short enough that this never reads
-// as drift, and single-paragraph input (most short texts) ends up as one row.
+// A gap token containing a blank line -- paragraphs are still kept as their
+// own visual unit (a divider after each one, see renderDuplicateView()),
+// even though the actual alignment grid now cuts far more often than that.
 const PARAGRAPH_BREAK_RE = /\n[ \t]*\n/;
 
-// Cuts a token list into rows at paragraph boundaries, so a side-by-side
-// comparison can build each row's two cells from the exact same slice of
-// tokens -- they always start and end on the same word, whatever either
-// column's own text happens to wrap to. See renderDuplicateView().
-function splitIntoRows(tokens) {
-  const rows = [];
+function splitIntoParagraphs(tokens) {
+  const paragraphs = [];
   let current = [];
   for (const token of tokens) {
     current.push(token);
     if (!token.is_word && PARAGRAPH_BREAK_RE.test(token.text)) {
-      rows.push(current);
+      paragraphs.push(current);
       current = [];
     }
   }
-  if (current.length) rows.push(current);
-  return rows;
+  if (current.length) paragraphs.push(current);
+  return paragraphs;
 }
 
-// One grid row per paragraph: an "Original" cell and a "Set" cell built from
-// the same token slice (so they can't drift out of correspondence the way
-// two independently word-wrapped columns would), with a gutter cell between
-// them for computeGutterMarks(). All three are appended straight into the
+// Cuts one paragraph's tokens into line-sized rows, greedily adding whole
+// words until *either* column's text for the row would reach `charsPerLine`
+// -- so a row is sized to whichever of the two variants for it is longer,
+// and both normally fit on one real line at the column's actual width. This
+// is what keeps every row aligned, not just paragraph starts: two
+// independently word-wrapped columns drift line by line as soon as a
+// replacement is a different length than the original, but a row built this
+// way can only ever break at the same word position in both.
+function splitParagraphIntoLines(tokens, charsPerLine) {
+  const lines = [];
+  let current = [];
+  let originalLen = 0;
+  let setLen = 0;
+  for (const token of tokens) {
+    let addOriginal, addSet;
+    if (token.is_word) {
+      const original = originalByPosition.get(token.position);
+      addOriginal = (original !== undefined ? original : token.text).length;
+      addSet = token.text.length;
+    } else {
+      addOriginal = addSet = token.text.length;
+    }
+    // Decide *before* adding a word (never a gap, so a break always lands
+    // between words, on the gap that was already appended) whether it would
+    // push either column past budget -- checking after the fact, like a
+    // running total, lets one long word push a row well past its budget
+    // before the next check point even fires.
+    if (token.is_word && current.length > 0 &&
+        (originalLen + addOriginal > charsPerLine || setLen + addSet > charsPerLine)) {
+      lines.push(current);
+      current = [];
+      originalLen = 0;
+      setLen = 0;
+    }
+    current.push(token);
+    originalLen += addOriginal;
+    setLen += addSet;
+  }
+  if (current.length) lines.push(current);
+  return lines;
+}
+
+// How many monospace characters fit across one text column, measured from
+// the actual rendered width (the page frame's, which is laid out regardless
+// of which ribbon view is currently visible) and the .gcell class's real
+// font -- not guessed, so this stays correct across window sizes and if the
+// CSS's font/column widths ever change.
+function computeCharsPerLine() {
+  const frame = document.querySelector(".page-frame");
+  const frameWidth = frame ? frame.getBoundingClientRect().width : 0;
+  if (!frame || frameWidth <= 0) return 60; // not laid out yet -- a sane fallback
+  const style = getComputedStyle(frame);
+  const innerWidth = frameWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  const gutterWidth = 26; // matches .result-galleys' grid-template-columns
+  const columnWidth = (innerWidth - gutterWidth) / 2;
+
+  const probe = document.createElement("span");
+  probe.className = "gcell";
+  probe.style.cssText = "position:absolute; visibility:hidden; white-space:pre; left:-9999px; top:0;";
+  probe.textContent = "0".repeat(40);
+  document.body.appendChild(probe);
+  const charWidth = probe.getBoundingClientRect().width / 40;
+  document.body.removeChild(probe);
+
+  // A couple of characters of slack: text-node/span boundaries and
+  // sub-pixel rounding can make the real rendered width a hair different
+  // from charWidth * charCount, so budget slightly under the exact fit
+  // rather than risk tipping a row onto a second real line.
+  return charWidth > 0 ? Math.max(20, Math.floor(columnWidth / charWidth) - 2) : 58;
+}
+
+// Builds the Duplicate view's grid: an "Original" cell and a "Set" cell per
+// row, both built from the exact same token slice (see
+// splitParagraphIntoLines()), with a gutter cell between them for
+// computeGutterMarks(). All three are appended straight into the
 // #galleys-grid CSS grid, which auto-places every 3 children into one grid
 // row and sizes that row to whichever cell is taller -- no per-row wrapper
-// element needed.
+// element needed. Only a paragraph's last row gets the visual divider, so
+// this still reads as flowing paragraphs, not a chopped-up table.
 function renderDuplicateView() {
   els.galleysGrid.innerHTML = "";
-  for (const rowTokens of splitIntoRows(currentTokens)) {
-    const originalCell = document.createElement("div");
-    originalCell.className = "gcell gcell-original";
-    const gutterCell = document.createElement("div");
-    gutterCell.className = "gcell gcell-gutter";
-    const setCell = document.createElement("div");
-    setCell.className = "gcell gcell-set";
+  const charsPerLine = computeCharsPerLine();
 
-    for (const token of rowTokens) {
-      if (!token.is_word) {
-        originalCell.appendChild(document.createTextNode(token.text));
-        setCell.appendChild(document.createTextNode(token.text));
-        continue;
+  for (const paragraph of splitIntoParagraphs(currentTokens)) {
+    const lines = splitParagraphIntoLines(paragraph, charsPerLine);
+    lines.forEach((rowTokens, index) => {
+      const isParagraphEnd = index === lines.length - 1;
+      const originalCell = document.createElement("div");
+      originalCell.className = "gcell gcell-original" + (isParagraphEnd ? " paragraph-end" : "");
+      const gutterCell = document.createElement("div");
+      gutterCell.className = "gcell gcell-gutter" + (isParagraphEnd ? " paragraph-end" : "");
+      const setCell = document.createElement("div");
+      setCell.className = "gcell gcell-set" + (isParagraphEnd ? " paragraph-end" : "");
+
+      for (const token of rowTokens) {
+        if (!token.is_word) {
+          originalCell.appendChild(document.createTextNode(token.text));
+          setCell.appendChild(document.createTextNode(token.text));
+          continue;
+        }
+        const original = originalByPosition.get(token.position);
+        originalCell.appendChild(document.createTextNode(original !== undefined ? original : token.text));
+        const changed = correctionPositions.has(token.position) && original !== token.text;
+        setCell.appendChild(wordSpan(token.text, token.position, changed ? "corr" : null));
       }
-      const original = originalByPosition.get(token.position);
-      originalCell.appendChild(document.createTextNode(original !== undefined ? original : token.text));
-      const changed = correctionPositions.has(token.position) && original !== token.text;
-      setCell.appendChild(wordSpan(token.text, token.position, changed ? "corr" : null));
-    }
 
-    els.galleysGrid.appendChild(originalCell);
-    els.galleysGrid.appendChild(gutterCell);
-    els.galleysGrid.appendChild(setCell);
+      els.galleysGrid.appendChild(originalCell);
+      els.galleysGrid.appendChild(gutterCell);
+      els.galleysGrid.appendChild(setCell);
+    });
   }
 }
 
@@ -276,7 +348,13 @@ let gutterResizeTimer = null;
 window.addEventListener("resize", () => {
   if (currentMode !== "duplicate" || els.pageResult.hidden) return;
   clearTimeout(gutterResizeTimer);
-  gutterResizeTimer = setTimeout(computeGutterMarks, 150);
+  // A width change can shift charsPerLine, so the rows themselves (not just
+  // the marks) need rebuilding, or a row could now be wider/narrower than
+  // what it was originally sized to fit.
+  gutterResizeTimer = setTimeout(() => {
+    renderDuplicateView();
+    computeGutterMarks();
+  }, 150);
 });
 
 function setMode(mode) {

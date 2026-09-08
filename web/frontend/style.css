@@ -407,25 +407,24 @@ input[type="range"]::-moz-range-thumb {
 }
 .galleys-head .tiny:last-child { grid-column: 3; }
 
-/* One CSS grid row per sentence: renderDuplicateView() appends an
-   Original/gutter/Set cell triplet per row, in order, straight into this
-   grid -- every 3rd child starts a new implicit row, sized to whichever of
-   its two text cells is taller, so the pair can never drift apart the way
-   two independently word-wrapped columns would. */
+/* One CSS grid row per *line*, not per sentence or paragraph:
+   renderDuplicateView() appends an Original/gutter/Set cell triplet per
+   row, in order, straight into this grid -- every 3rd child starts a new
+   implicit row, sized to whichever of its two text cells is taller, so the
+   pair can never drift apart the way two independently word-wrapped
+   columns would. Rows carry no spacing of their own, so consecutive lines
+   of the same paragraph flow together as one block; only a paragraph's
+   last row (.paragraph-end, see splitParagraphIntoLines()) gets a divider,
+   so this still reads as flowing paragraphs rather than a chopped-up table. */
 .result-galleys {
   display: grid;
   grid-template-columns: 1fr 26px 1fr;
 }
 .gcell { font-size: 0.88rem; line-height: 1.9; }
-.gcell-original, .gcell-set {
-  padding: 0.55rem 0;
-  border-bottom: 1px dashed var(--border);
-}
 .gcell-gutter {
   position: relative;
   border-left: 1px dotted var(--border);
   border-right: 1px dotted var(--border);
-  border-bottom: 1px dashed var(--border);
 }
 .gcell-gutter .mark {
   position: absolute;
@@ -435,11 +434,16 @@ input[type="range"]::-moz-range-thumb {
   font-size: 0.85rem;
   line-height: 1;
 }
+.paragraph-end {
+  padding-bottom: 0.65rem;
+  margin-bottom: 0.65rem;
+  border-bottom: 1px dashed var(--border);
+}
 
 @media (max-width: 640px) {
   .result-galleys { grid-template-columns: 1fr; }
   .gcell-gutter { display: none; }
-  .gcell-original:not(:first-child) {
+  .gcell-set.paragraph-end + .gcell-original {
     margin-top: 1rem;
     padding-top: 1rem;
     border-top: 1px dashed var(--border);
