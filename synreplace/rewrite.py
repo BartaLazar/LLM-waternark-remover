@@ -1,10 +1,10 @@
 """Walk a text and swap every N-th word for its closest synonym."""
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 from .inflect import match_case
-from .synonyms import SynonymFinder
+from .sources import DEFAULT_SOURCES, make_source
 from .tokens import Token, detokenize, tokenize
 
 # Winner + this many extra choices offered alongside it (e.g. for a UI picker).
@@ -33,21 +33,27 @@ def rewrite(
     allow_multiword: bool = False,
     slide: bool = False,
     threshold: float = 0.95,
-    finder: Optional[SynonymFinder] = None,
+    sources: Sequence[str] = DEFAULT_SOURCES,
+    finder: Optional[object] = None,
 ) -> Tuple[str, List[Replacement]]:
     """Return the rewritten text and the list of substitutions made.
 
     Starting from the first word, every `every`-th word after it is looked up
     (word 1, then `1 + every`, `1 + 2*every`, ...). Words with no usable
-    synonym -- function words, names, anything WordNet does not cover, or a
-    sense too dissimilar to the word's dominant meaning to clear `threshold`
-    (see `SynonymFinder`) -- are left alone; with `slide=True` the search
-    moves on to the following word instead, which keeps the substitution rate
-    close to 1-in-N.
+    synonym -- function words, names, nothing any enabled source covers, or a
+    WordNet sense too dissimilar to the word's dominant meaning to clear
+    `threshold` (see `SynonymFinder`) -- are left alone; with `slide=True` the
+    search moves on to the following word instead, which keeps the
+    substitution rate close to 1-in-N.
+
+    `sources` selects one or more synonym sources by name (see
+    `sources.SOURCE_NAMES`) -- with more than one, candidates from every
+    enabled source are pooled together (see `sources.CompositeSource`).
+    Ignored if `finder` is given explicitly.
     """
     tokens, replacements = rewrite_tokens(
         text, every=every, senses=senses, allow_multiword=allow_multiword,
-        slide=slide, threshold=threshold, finder=finder,
+        slide=slide, threshold=threshold, sources=sources, finder=finder,
     )
     return detokenize(tokens), replacements
 
@@ -59,7 +65,8 @@ def rewrite_tokens(
     allow_multiword: bool = False,
     slide: bool = False,
     threshold: float = 0.95,
-    finder: Optional[SynonymFinder] = None,
+    sources: Sequence[str] = DEFAULT_SOURCES,
+    finder: Optional[object] = None,
 ) -> Tuple[List[Token], List[Replacement]]:
     """Same substitution as `rewrite()`, but returns the full token list
     (words *and* the gaps between them) instead of the joined string.
@@ -74,7 +81,7 @@ def rewrite_tokens(
 
     from nltk import pos_tag
 
-    finder = finder or SynonymFinder(senses=senses, allow_multiword=allow_multiword, threshold=threshold)
+    finder = finder or make_source(sources, senses=senses, allow_multiword=allow_multiword, threshold=threshold)
     tokens = tokenize(text)
     # Positions of the real words within the full token list; gaps are ignored
     # for counting but stay in `tokens` so the output keeps its formatting.

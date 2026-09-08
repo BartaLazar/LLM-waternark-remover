@@ -20,7 +20,7 @@
       </span>
       <div>
         <h1>synreplace</h1>
-        <p class="subtitle">Replace every N-th word with its closest WordNet synonym.</p>
+        <p class="subtitle">Replace every N-th word with its closest synonym.</p>
       </div>
     </div>
   </header>
@@ -67,6 +67,30 @@
             <span class="switch-track" aria-hidden="true"></span>
             <span class="switch-label">Allow multi-word</span>
           </label>
+        </div>
+        <div class="field field-full">
+          <label id="sources-label">Sources</label>
+          <div class="source-picker" role="group" aria-labelledby="sources-label">
+            <label class="source-option">
+              <input type="checkbox" class="source-checkbox" value="wordnet" checked />
+              <span class="source-name">WordNet</span>
+              <span class="source-tag">offline</span>
+            </label>
+            <label class="source-option">
+              <input type="checkbox" class="source-checkbox" value="datamuse" />
+              <span class="source-name">Datamuse</span>
+              <span class="source-tag source-tag-online">online</span>
+            </label>
+            <label class="source-option">
+              <input type="checkbox" class="source-checkbox" value="dictionaryapi" />
+              <span class="source-name">Free Dictionary API</span>
+              <span class="source-tag source-tag-online">online</span>
+            </label>
+          </div>
+          <p class="field-hint">
+            Pick one or more &mdash; results from every checked source are pooled
+            together. Senses/Threshold above only affect WordNet.
+          </p>
         </div>
       </div>
 

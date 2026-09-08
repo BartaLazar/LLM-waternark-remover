@@ -1,8 +1,11 @@
 import unittest
+from unittest.mock import patch
 
 from synreplace import rewrite, rewrite_tokens
 from synreplace.corpora import ensure_corpora
 from synreplace.inflect import add_ed, add_ing, add_s, match_case
+from synreplace.online import DatamuseSource, DictionaryApiSource
+from synreplace.sources import CompositeSource, SOURCE_NAMES, make_source
 from synreplace.synonyms import SynonymFinder
 from synreplace.tokens import detokenize, tokenize
 
@@ -470,6 +473,210 @@ class TestCli(unittest.TestCase):
         with redirect_stdout(strict_out):
             main(["-n", "1", "--senses", "3", "--threshold", "0.95", SAMPLE])
         self.assertNotEqual(loose_out.getvalue(), strict_out.getvalue())
+
+
+# Fixtures captured from real API responses (see synreplace/online.py) so the
+# parsing logic is exercised against actual response shapes, without a live
+# network call in the test suite itself.
+DATAMUSE_HAPPY_ADJ = [
+    {"word": "halcyon", "score": 61042, "tags": ["adj"]},
+    {"word": "content", "score": 57050, "tags": ["adj", "n", "v"]},
+    {"word": "bright", "score": 43054, "tags": ["adj", "n"]},
+    {"word": "joyful", "score": 33031, "tags": ["adj"]},
+    {"word": "promptly", "score": 30027, "tags": ["adv"]},  # wrong POS, must be filtered out
+]
+
+DICTIONARYAPI_HAPPY = [
+    {
+        "word": "happy",
+        "meanings": [
+            {
+                "partOfSpeech": "noun",
+                "definitions": [{"definition": "A happy event.", "synonyms": []}],
+                "synonyms": [],
+            },
+            {
+                "partOfSpeech": "adjective",
+                "definitions": [{"definition": "Feeling happy.", "synonyms": []}],
+                "synonyms": ["cheerful", "content", "delighted", "elated"],
+            },
+        ],
+    }
+]
+
+
+class TestDatamuseSource(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_corpora(quiet=True)
+
+    def test_returns_candidates_ranked_and_normalized(self):
+        with patch("synreplace.online._get_json", return_value=DATAMUSE_HAPPY_ADJ):
+            source = DatamuseSource()
+            results = source.find_top("happy", "JJ", limit=4)
+        words = [w for w, _ in results]
+        self.assertEqual(words, ["halcyon", "content", "bright", "joyful"])
+        self.assertAlmostEqual(results[0][1], 1.0)  # top result always normalizes to 1.0
+        self.assertTrue(all(0.0 <= sim <= 1.0 for _, sim in results))
+        self.assertEqual(sorted((s for _, s in results), reverse=True), [s for _, s in results])
+
+    def test_filters_out_wrong_part_of_speech(self):
+        with patch("synreplace.online._get_json", return_value=DATAMUSE_HAPPY_ADJ):
+            source = DatamuseSource()
+            results = source.find_top("happy", "JJ", limit=10)
+        self.assertNotIn("promptly", [w for w, _ in results])
+
+    def test_network_failure_yields_empty_list_not_an_exception(self):
+        with patch("synreplace.online._get_json", return_value=None):
+            source = DatamuseSource()
+            self.assertEqual(source.find_top("happy", "JJ"), [])
+            self.assertIsNone(source.find("happy", "JJ"))
+
+    def test_repeated_lookup_is_cached(self):
+        with patch("synreplace.online._get_json", return_value=DATAMUSE_HAPPY_ADJ) as mock_get:
+            source = DatamuseSource()
+            source.find_top("happy", "JJ")
+            source.find_top("happy", "JJ")
+        self.assertEqual(mock_get.call_count, 1)
+
+    def test_untagged_parts_of_speech_are_left_alone(self):
+        source = DatamuseSource()
+        self.assertEqual(source.find_top("the", "DT"), [])
+
+
+class TestDictionaryApiSource(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_corpora(quiet=True)
+
+    def test_extracts_synonyms_for_the_matching_part_of_speech_only(self):
+        with patch("synreplace.online._get_json", return_value=DICTIONARYAPI_HAPPY):
+            source = DictionaryApiSource()
+            results = source.find_top("happy", "JJ", limit=4)
+        words = [w for w, _ in results]
+        self.assertEqual(words, ["cheerful", "content", "delighted", "elated"])
+        # No per-candidate ranking is available from this API; every result
+        # shares the same fixed similarity.
+        self.assertTrue(all(sim == DictionaryApiSource.FIXED_SIMILARITY for _, sim in results))
+
+    def test_network_failure_yields_empty_list_not_an_exception(self):
+        with patch("synreplace.online._get_json", return_value=None):
+            source = DictionaryApiSource()
+            self.assertEqual(source.find_top("happy", "JJ"), [])
+
+    def test_repeated_lookup_is_cached(self):
+        with patch("synreplace.online._get_json", return_value=DICTIONARYAPI_HAPPY) as mock_get:
+            source = DictionaryApiSource()
+            source.find_top("happy", "JJ")
+            source.find_top("happy", "JJ")
+        self.assertEqual(mock_get.call_count, 1)
+
+
+class _StubSource:
+    """A fake synonym source returning a fixed answer, for testing
+    CompositeSource's merge/dedupe logic in isolation from any real source.
+    Sorts best-first like every real source must -- CompositeSource only
+    asks each source for its own top `limit`, trusting that each source's
+    own truncation doesn't drop a candidate that would have ranked highly
+    overall, so an out-of-order stub isn't a faithful stand-in for one."""
+
+    def __init__(self, results):
+        self._results = sorted(results, key=lambda item: -item[1])
+
+    def find_top(self, word, tag, limit=4):
+        return self._results[:limit]
+
+
+class TestCompositeSource(unittest.TestCase):
+    def test_merges_candidates_from_every_source(self):
+        a = _StubSource([("swift", 0.9), ("rapid", 0.6)])
+        b = _StubSource([("speedy", 0.8)])
+        combo = CompositeSource([a, b])
+        words = {w for w, _ in combo.find_top("quick", "JJ", limit=10)}
+        self.assertEqual(words, {"swift", "rapid", "speedy"})
+
+    def test_a_candidate_from_two_sources_keeps_the_higher_score(self):
+        a = _StubSource([("swift", 0.4)])
+        b = _StubSource([("swift", 0.9)])
+        combo = CompositeSource([a, b])
+        results = dict(combo.find_top("quick", "JJ", limit=10))
+        self.assertEqual(results["swift"], 0.9)
+
+    def test_results_are_ranked_by_score_descending(self):
+        a = _StubSource([("low", 0.2), ("high", 0.9)])
+        combo = CompositeSource([a])
+        words = [w for w, _ in combo.find_top("quick", "JJ", limit=10)]
+        self.assertEqual(words, ["high", "low"])
+
+    def test_respects_the_overall_limit_after_merging(self):
+        a = _StubSource([("a1", 0.9), ("a2", 0.8), ("a3", 0.7)])
+        b = _StubSource([("b1", 0.95)])
+        combo = CompositeSource([a, b])
+        results = combo.find_top("quick", "JJ", limit=2)
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0][0], "b1")
+
+    def test_requires_at_least_one_source(self):
+        with self.assertRaises(ValueError):
+            CompositeSource([])
+
+    def test_find_returns_the_single_best_candidate(self):
+        combo = CompositeSource([_StubSource([("swift", 0.4), ("rapid", 0.9)])])
+        self.assertEqual(combo.find("quick", "JJ"), ("rapid", 0.9))
+
+
+class TestMakeSource(unittest.TestCase):
+    def test_single_name_returns_that_source_directly_not_wrapped(self):
+        source = make_source(["wordnet"])
+        self.assertIsInstance(source, SynonymFinder)
+
+    def test_multiple_names_returns_a_composite(self):
+        source = make_source(["wordnet", "datamuse"])
+        self.assertIsInstance(source, CompositeSource)
+        self.assertEqual(len(source.sources), 2)
+
+    def test_duplicate_names_are_deduplicated(self):
+        source = make_source(["wordnet", "wordnet"])
+        self.assertIsInstance(source, SynonymFinder)  # not a Composite of two identical sources
+
+    def test_rejects_unknown_source_names(self):
+        with self.assertRaises(ValueError):
+            make_source(["not-a-real-source"])
+
+    def test_rejects_empty_source_list(self):
+        with self.assertRaises(ValueError):
+            make_source([])
+
+    def test_every_declared_source_name_is_buildable(self):
+        for name in SOURCE_NAMES:
+            make_source([name])  # must not raise
+
+
+class TestSourcesCli(unittest.TestCase):
+    def test_build_parser_accepts_comma_separated_sources(self):
+        from synreplace.cli import build_parser
+
+        args = build_parser().parse_args(["--sources", "wordnet,datamuse", "hello"])
+        self.assertEqual(args.sources, ["wordnet", "datamuse"])
+
+    def test_default_sources_is_wordnet_only(self):
+        from synreplace.cli import build_parser
+
+        args = build_parser().parse_args(["hello"])
+        self.assertEqual(args.sources, ["wordnet"])
+
+    def test_unknown_source_name_is_rejected_with_exit_code_2(self):
+        import io
+        from contextlib import redirect_stderr
+
+        from synreplace.cli import main
+
+        err = io.StringIO()
+        with redirect_stderr(err):
+            with self.assertRaises(SystemExit) as ctx:
+                main(["--sources", "not-a-real-source", "hello world"])
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn("unknown source", err.getvalue())
 
 
 if __name__ == "__main__":

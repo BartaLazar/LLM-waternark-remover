@@ -9,6 +9,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from synreplace.sources import SOURCE_NAMES
+
 
 class RewriteRequest(BaseModel):
     text: str = Field(
@@ -43,12 +45,34 @@ class RewriteRequest(BaseModel):
         False,
         description="Allow multi-word synonyms such as 'give up'.",
     )
+    sources: List[str] = Field(
+        default_factory=lambda: ["wordnet"],
+        description="One or more synonym sources to use, by name (see "
+                     "/info for the full list with descriptions). Naming "
+                     "more than one pools their candidates together rather "
+                     "than picking one. senses/threshold only affect the "
+                     "'wordnet' source.",
+        examples=[["wordnet"], ["wordnet", "datamuse"]],
+    )
 
     @field_validator("text")
     @classmethod
     def text_must_not_be_blank(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("text must contain at least one non-whitespace character")
+        return value
+
+    @field_validator("sources")
+    @classmethod
+    def sources_must_be_known_and_nonempty(cls, value: List[str]) -> List[str]:
+        if not value:
+            raise ValueError("at least one source is required")
+        unknown = [name for name in value if name not in SOURCE_NAMES]
+        if unknown:
+            raise ValueError(
+                "unknown source(s): %s (choose from %s)"
+                % (", ".join(unknown), ", ".join(SOURCE_NAMES))
+            )
         return value
 
 
@@ -109,9 +133,19 @@ class Defaults(BaseModel):
     senses: int
     threshold: float
     allow_multiword: bool
+    sources: List[str]
+
+
+class SourceInfo(BaseModel):
+    name: str = Field(description="The name to pass in RewriteRequest.sources.")
+    description: str = Field(description="Human-readable summary of this source.")
+    online: bool = Field(description="True if this source needs a network connection.")
 
 
 class InfoResponse(BaseModel):
     synreplace_version: str
     api_version: str
     defaults: Defaults
+    available_sources: List[SourceInfo] = Field(
+        description="Every valid value for RewriteRequest.sources."
+    )

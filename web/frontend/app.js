@@ -31,6 +31,7 @@ const els = {
   threshold: document.getElementById("threshold"),
   thresholdValue: document.getElementById("threshold-value"),
   allowMultiword: document.getElementById("allow_multiword"),
+  sourceCheckboxes: document.querySelectorAll(".source-checkbox"),
   rewriteBtn: document.getElementById("rewrite-btn"),
   rewriteIcon: document.getElementById("rewrite-icon"),
   rewriteSpinner: document.getElementById("rewrite-spinner"),
@@ -231,16 +232,28 @@ function jumpToWord(position) {
   span.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
+function checkedSources() {
+  return Array.from(els.sourceCheckboxes)
+    .filter((checkbox) => checkbox.checked)
+    .map((checkbox) => checkbox.value);
+}
+
 async function rewrite() {
   const text = els.text.value;
   if (!text.trim()) {
     showError("Enter some text first.");
     return;
   }
+  const sources = checkedSources();
+  if (sources.length === 0) {
+    showError("Pick at least one source.");
+    return;
+  }
 
   hideError();
   setBusy(true);
-  setStatus("Rewriting…");
+  const usesOnlineSource = sources.some((name) => name !== "wordnet");
+  setStatus(usesOnlineSource ? "Rewriting… (online sources can take a while)" : "Rewriting…");
 
   const payload = {
     text: text,
@@ -249,6 +262,7 @@ async function rewrite() {
     senses: Number(els.senses.value) || 3,
     threshold: Number(els.threshold.value),
     allow_multiword: els.allowMultiword.checked,
+    sources: sources,
   };
 
   try {

@@ -209,6 +209,51 @@ textarea:focus, input[type="number"]:focus, .result-box:focus {
 
 .field { flex: 1 1 130px; min-width: 130px; }
 .field-wide { flex-basis: 220px; }
+.field-full { flex-basis: 100%; }
+
+.source-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.source-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  padding: 0.45rem 0.9rem 0.45rem 0.7rem;
+  cursor: pointer;
+  font-weight: normal;
+  margin: 0;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.source-option:has(.source-checkbox:checked) {
+  border-color: var(--accent-solid);
+  background: var(--accent-soft);
+}
+.source-checkbox { accent-color: var(--accent-solid); }
+.source-name { font-size: 0.9rem; }
+
+.source-tag {
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: var(--track);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+}
+.source-tag-online { color: var(--accent-2); }
+
+.field-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
 
 .value-badge {
   font-weight: 700;

@@ -1,8 +1,10 @@
 # synreplace
 
 A small CLI that takes a text and gives it back with every N-th word swapped for
-its closest synonym. Synonyms come from **WordNet** via NLTK — everything runs
-offline, no API key, no network after the first run.
+its closest synonym. Synonyms come from **WordNet** via NLTK by default — fully
+offline, no API key, no network after the first run — with two free, tokenless
+online dictionary APIs available as opt-in alternatives (or additions) via
+`--sources`; see [below](#synonym-sources).
 
 > Sidenote: also useful to break LLMs' watermarking. But who would want to do such silly thing...
 
@@ -33,8 +35,8 @@ pip install -r requirements.txt
 ## Usage
 
 ```
-synreplace [-n N] [--slide] [--senses K] [--threshold T] [--multiword] [-v]
-           [-c | -i FILE | -o FILE | TEXT]
+synreplace [-n N] [--slide] [--senses K] [--threshold T] [--multiword]
+           [--sources NAME[,NAME...]] [-v] [-c | -i FILE | -o FILE | TEXT]
 ```
 
 Input is taken from the first of these that applies:
@@ -56,6 +58,7 @@ Input is taken from the first of these that applies:
 | `--senses K` | Consider the K closest senses of the word, not just the closest (default `3`) |
 | `--threshold T` | Minimum sense similarity (`0`-`1`) a `--senses` candidate must clear (default `0.95`); `0` disables the check — see below |
 | `--multiword` | Allow multi-word synonyms such as "give up" |
+| `--sources NAME[,NAME...]` | Synonym source(s) to use, comma-separated (default `wordnet`) — see [below](#synonym-sources) |
 | `-v, --verbose` | List every substitution on stderr, with its sense similarity |
 | `-c, --clip` | Read from and write back to the clipboard |
 | `-i, --input` / `-o, --output` | Read from / write to a file. With `-i` alone, output goes to `<name>-modified.<ext>` next to the input file |
@@ -127,6 +130,42 @@ default (`--senses 3`), so `--threshold` is already doing real filtering work
 out of the box. Pass `--senses 1` to turn that off entirely and use only each
 word's single most common sense.
 
+## Synonym sources
+
+By default `synreplace` looks synonyms up in WordNet, fully offline. Two free
+online dictionary APIs are available too — neither needs an API key or
+signup — and `--sources` accepts more than one at once, pooling every enabled
+source's candidates into one ranked list rather than picking exactly one:
+
+| Name | What it is | Network? |
+| --- | --- | --- |
+| `wordnet` | The default described above | No |
+| `datamuse` | [Datamuse](https://www.datamuse.com/api/), built specifically for word-relation queries; returns a relevance score per candidate | Yes |
+| `dictionaryapi` | [Free Dictionary API](https://dictionaryapi.dev/), a definitions API with synonyms as a secondary field; coverage varies a lot by word, and it reports no per-candidate score (every candidate shows a flat 100%) | Yes |
+
+```bash
+synreplace --sources wordnet,datamuse -v "the quick brown fox jumps over the lazy dog"
+```
+
+Trade-offs worth knowing before reaching for the online sources:
+
+- **Speed and reliability.** Each distinct word costs one HTTP request (cached
+  per run, so a repeated word is free the second time); a slow or unreachable
+  API can add many seconds to a rewrite. A source that fails just contributes
+  no candidates rather than erroring out the whole run — a one-time note is
+  printed to stderr the first time that happens.
+- **`--senses` and `--threshold` only affect `wordnet`.** The online APIs have
+  no notion of "the word's Kth-closest sense" — Datamuse in particular
+  doesn't disambiguate senses at all, so it can occasionally surface a
+  synonym for the wrong meaning of a word (e.g. "fox" the animal vs. "to fox
+  someone" meaning to trick them) in a way `--threshold` can't filter for
+  that source.
+- **Similarity numbers aren't on the same scale across sources.** WordNet's is
+  a graph-distance score, Datamuse's is a normalized relevance score, and
+  `dictionaryapi`'s is a fixed 100% for every candidate (no ranking data is
+  available). All three are shown as 0–100% for consistency, but a Datamuse
+  60% and a WordNet 60% don't mean quite the same thing.
+
 ## What is deliberately left alone
 
 The tool prefers leaving a word alone over producing a wrong one:
@@ -145,9 +184,11 @@ expect. See `--slide` above for the fix.
 
 ## Quality note
 
-WordNet has no idea what your sentence is about. It picks the most common sense,
-which is right most of the time and occasionally not (`problem` → `job`). Read
-the output before using it; `-v` shows you exactly what changed.
+None of these sources understand your sentence's context. WordNet picks the
+most common sense, which is right most of the time and occasionally not
+(`problem` → `job`); the online sources have their own failure modes, noted
+under [Synonym sources](#synonym-sources) above. Read the output before using
+it; `-v` shows you exactly what changed.
 
 ## Tests
 

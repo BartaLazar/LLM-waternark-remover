@@ -14,13 +14,20 @@ from fastapi.staticfiles import StaticFiles
 
 from synreplace import __version__ as synreplace_version
 from synreplace.corpora import ensure_corpora
+from synreplace.sources import SOURCE_DESCRIPTIONS, SOURCE_NAMES
 from synreplace.tokens import detokenize
 
 from . import schemas, service
 
 API_VERSION = "v1"
 
-DEFAULTS = schemas.Defaults(every=5, slide=False, senses=3, threshold=0.95, allow_multiword=False)
+DEFAULTS = schemas.Defaults(
+    every=5, slide=False, senses=3, threshold=0.95, allow_multiword=False, sources=["wordnet"]
+)
+AVAILABLE_SOURCES = [
+    schemas.SourceInfo(name=name, description=SOURCE_DESCRIPTIONS[name], online=name != "wordnet")
+    for name in SOURCE_NAMES
+]
 
 
 @asynccontextmanager
@@ -33,7 +40,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="synreplace API",
-    description="Replace every N-th word of a text with its closest WordNet synonym.",
+    description="Replace every N-th word of a text with its closest synonym.",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -62,6 +69,7 @@ def info() -> schemas.InfoResponse:
         synreplace_version=synreplace_version,
         api_version=API_VERSION,
         defaults=DEFAULTS,
+        available_sources=AVAILABLE_SOURCES,
     )
 
 
@@ -90,6 +98,7 @@ def rewrite_text(payload: schemas.RewriteRequest) -> schemas.RewriteResponse:
         senses=payload.senses,
         threshold=payload.threshold,
         allow_multiword=payload.allow_multiword,
+        sources=payload.sources,
     )
 
     out_replacements = [
