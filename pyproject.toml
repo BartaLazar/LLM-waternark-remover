@@ -7,6 +7,8 @@ name = "synreplace"
 version = "0.1.0"
 description = "Replace every N-th word of a text with its closest WordNet synonym."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.8"
 dependencies = ["nltk>=3.8"]
 

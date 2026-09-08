@@ -2,9 +2,10 @@
 
 ![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue)
 ![No API key required](https://img.shields.io/badge/API%20key-not%20required-brightgreen)
-![Tests](https://img.shields.io/badge/tests-348%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-343%20passing-brightgreen)
 ![Web UI](https://img.shields.io/badge/web%20UI-FastAPI-009688)
 ![Frontend](https://img.shields.io/badge/frontend-no%20build%20step-blue)
+![License: MIT](https://img.shields.io/badge/license-MIT-yellow)
 
 A small CLI that takes a text and gives it back with every N-th word swapped for
 its closest synonym. Synonyms come from **WordNet** via NLTK by default (fully
@@ -37,6 +38,7 @@ The same rewrite, from the browser UI:
 - [Web interface](#web-interface)
 - [Project layout](#project-layout)
 - [Tests](#tests)
+- [License](#license)
 
 ## Features
 
@@ -293,3 +295,7 @@ A few things it adds on top of the CLI:
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+## License
+
+[MIT](LICENSE)
