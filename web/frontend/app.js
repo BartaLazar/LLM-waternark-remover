@@ -26,22 +26,31 @@ const els = {
   text: document.getElementById("text"),
   wordCount: document.getElementById("word-count"),
   every: document.getElementById("every"),
-  slide: document.getElementById("slide"),
   senses: document.getElementById("senses"),
   threshold: document.getElementById("threshold"),
   thresholdValue: document.getElementById("threshold-value"),
-  allowMultiword: document.getElementById("allow_multiword"),
+  slideToggle: document.getElementById("slide-toggle"),
+  multiwordToggle: document.getElementById("multiword-toggle"),
+  sourcesBtn: document.getElementById("sources-btn"),
+  sourcesSummary: document.getElementById("sources-summary"),
+  sourcesPanel: document.getElementById("sources-panel"),
   sourceCheckboxes: document.querySelectorAll(".source-checkbox"),
+  ribbonKeys: document.querySelectorAll("#ribbon-keys .key"),
   rewriteBtn: document.getElementById("rewrite-btn"),
-  rewriteIcon: document.getElementById("rewrite-icon"),
-  rewriteSpinner: document.getElementById("rewrite-spinner"),
+  rewriteLabel: document.getElementById("rewrite-label"),
   loadingBar: document.getElementById("loading-bar"),
   sampleBtn: document.getElementById("sample-btn"),
   status: document.getElementById("status"),
-  resultPanel: document.getElementById("result-panel"),
-  result: document.getElementById("result"),
-  substitutionsHeading: document.getElementById("substitutions-heading"),
-  substitutionsBody: document.querySelector("#substitutions tbody"),
+  pageResult: document.getElementById("page-result"),
+  viewBlack: document.getElementById("view-black"),
+  viewBlackRed: document.getElementById("view-blackred"),
+  viewDuplicate: document.getElementById("view-duplicate"),
+  galleyOriginalText: document.querySelector("#galley-original .galley-text"),
+  galleySetText: document.querySelector("#galley-set .galley-text"),
+  gutter: document.getElementById("gutter"),
+  correctionsPanel: document.getElementById("corrections-panel"),
+  correctionsHeading: document.getElementById("corrections-heading"),
+  cardsRow: document.getElementById("cards-row"),
   copyBtn: document.getElementById("copy-btn"),
   downloadBtn: document.getElementById("download-btn"),
   errorPanel: document.getElementById("error-panel"),
@@ -50,9 +59,18 @@ const els = {
 
 // The last rewrite response's full token list (words + the gaps between
 // them), kept client-side so a Reset/alternative click can edit one word and
-// rebuild the result text without re-implementing word-boundary detection --
+// rebuild every view without re-implementing word-boundary detection --
 // mirrors the API's `tokens` field 1:1. See web/docs/API.md.
 let currentTokens = [];
+
+// position -> the word that was originally there, for every position the API
+// actually replaced. Fixed for the life of one rewrite response; only
+// currentTokens changes as the user resets/picks alternatives. Drives the
+// struck-through text in Black+Red and the "Original" galley in Duplicate.
+let originalByPosition = new Map();
+
+// "black" | "blackred" | "duplicate"
+let currentMode = "black";
 
 // The <span class="result-word"> currently highlighted by jumpToWord(), if any.
 let highlightedWord = null;
@@ -69,162 +87,178 @@ function updateWordCount() {
 
 function setBusy(isBusy) {
   els.rewriteBtn.disabled = isBusy;
-  els.rewriteSpinner.hidden = !isBusy;
-  els.rewriteIcon.hidden = isBusy;
+  els.rewriteLabel.textContent = isBusy ? "Striking…" : "Strike";
   els.loadingBar.hidden = !isBusy;
 }
 
 function showError(message) {
   els.errorPanel.hidden = false;
   els.errorMessage.textContent = message;
-  els.resultPanel.hidden = true;
+  els.pageResult.hidden = true;
+  els.correctionsPanel.hidden = true;
 }
 
 function hideError() {
   els.errorPanel.hidden = true;
 }
 
-function renderResult(data) {
-  els.resultPanel.hidden = false;
-  currentTokens = data.tokens.map((t) => ({ ...t }));
-  highlightedWord = null;
-  renderResultWords();
-  els.substitutionsHeading.textContent =
-    data.substitution_count + " substitution" + (data.substitution_count === 1 ? "" : "s");
-
-  els.substitutionsBody.innerHTML = "";
-  for (const item of data.replacements) {
-    els.substitutionsBody.appendChild(buildSubstitutionRow(item));
-  }
-}
-
-// Renders currentTokens into #result as one <span class="result-word"> per
-// word (gaps are plain text nodes), so a specific word can later get a real,
-// persistent highlight -- see jumpToWord().
-function renderResultWords() {
-  els.result.innerHTML = "";
-  for (const token of currentTokens) {
-    if (token.is_word) {
-      const span = document.createElement("span");
-      span.className = "result-word";
-      span.dataset.position = token.position;
-      span.textContent = token.text;
-      els.result.appendChild(span);
-    } else {
-      els.result.appendChild(document.createTextNode(token.text));
-    }
-  }
+function similarityLabel(similarity) {
+  return similarity == null ? "—" : Math.round(similarity * 100) + "%";
 }
 
 function currentResultText() {
   return currentTokens.map((t) => t.text).join("");
 }
 
-function similarityLabel(similarity) {
-  return similarity == null ? "—" : Math.round(similarity * 100) + "%";
+// ============================= result views =============================
+// Three renderings of the same currentTokens, kept in sync and switched
+// between with [hidden] by the ribbon selector -- see setMode(). Rebuilding
+// all three from scratch on every edit (rather than patching spans in place)
+// keeps them from drifting out of sync with each other; at a few hundred
+// words this is cheap.
+
+function renderAllViews() {
+  renderPlainView(els.viewBlack, currentTokens);
+  renderCorrectionView(els.viewBlackRed);
+  renderDuplicateView();
+  if (currentMode === "duplicate") computeGutterMarks();
 }
 
-function cell(text) {
-  const td = document.createElement("td");
-  td.textContent = text;
-  return td;
+function wordSpan(text, position, extraClass) {
+  const span = document.createElement("span");
+  span.className = "result-word" + (extraClass ? " " + extraClass : "");
+  span.dataset.position = position;
+  span.textContent = text;
+  return span;
 }
 
-// One row per substitution: the original word, the word currently applied at
-// that position (editable via the buttons below), its similarity, up to
-// ALTERNATIVES_LIMIT alternative-synonym chips, and a Reset-to-original button.
-function buildSubstitutionRow(item) {
-  const row = document.createElement("tr");
-  row.dataset.position = item.position;
-
-  const currentCell = document.createElement("td");
-  currentCell.className = "current-cell";
-  const wordLink = document.createElement("button");
-  wordLink.type = "button";
-  wordLink.className = "word-link";
-  wordLink.textContent = item.replacement;
-  wordLink.title = "Find this word in the result";
-  wordLink.addEventListener("click", () => jumpToWord(item.position));
-  currentCell.appendChild(wordLink);
-  const similarityCell = cell(similarityLabel(item.similarity));
-  similarityCell.className = "similarity-cell";
-
-  row.appendChild(cell(String(item.position)));
-  row.appendChild(cell(item.original));
-  row.appendChild(currentCell);
-  row.appendChild(similarityCell);
-
-  const altCell = document.createElement("td");
-  altCell.className = "alternatives-cell";
-  const chips = [];
-  if (item.alternatives.length === 0) {
-    // A td with no content at all doesn't establish a normal text baseline,
-    // so `vertical-align: baseline` computes a slightly different (shorter)
-    // row height for it than for a sibling row whose alternatives cell holds
-    // a real chip -- rows drift out of alignment by a pixel or two. An
-    // invisible placeholder with the exact same tag (a <button>, not a
-    // <span> -- a plain span is inline by default and its vertical padding
-    // doesn't expand the line box the way a button's does) has identical box
-    // metrics to a real chip, so every row's baseline math matches
-    // regardless of whether it has alternatives to show.
-    const placeholder = document.createElement("button");
-    placeholder.type = "button";
-    placeholder.className = "chip chip-placeholder";
-    placeholder.textContent = "—";
-    placeholder.disabled = true;
-    placeholder.setAttribute("aria-hidden", "true");
-    altCell.appendChild(placeholder);
+// Renders a token list as plain text, one <span class="result-word"> per
+// word so a specific word can later get a real, persistent highlight --
+// see jumpToWord().
+function renderPlainView(container, tokens) {
+  container.innerHTML = "";
+  for (const token of tokens) {
+    if (token.is_word) {
+      container.appendChild(wordSpan(token.text, token.position, null));
+    } else {
+      container.appendChild(document.createTextNode(token.text));
+    }
   }
-  for (const alt of item.alternatives) {
-    const chip = document.createElement("button");
-    chip.type = "button";
-    chip.className = "chip";
-    chip.textContent = alt.word + " " + similarityLabel(alt.similarity);
-    chip.addEventListener("click", () => applyChoice(row, item, alt.word, alt.similarity, chip, chips));
-    chips.push(chip);
-    altCell.appendChild(chip);
-  }
-  row.appendChild(altCell);
-
-  const actionCell = document.createElement("td");
-  const resetBtn = document.createElement("button");
-  resetBtn.type = "button";
-  resetBtn.className = "secondary reset-btn";
-  resetBtn.title = "Reset to the original word";
-  resetBtn.innerHTML =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
-    'stroke-linecap="round" stroke-linejoin="round" class="icon">' +
-    '<path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" /></svg>Reset';
-  resetBtn.addEventListener("click", () => applyChoice(row, item, item.original, null, null, chips));
-  actionCell.appendChild(resetBtn);
-  row.appendChild(actionCell);
-
-  return row;
 }
 
-// Sets `word` as the currently-applied text at `item.position`, updates that
-// word's span in the result view in place, and updates this row's
-// "Current"/"Similarity" cells and which chip (if any) is marked active.
-function applyChoice(row, item, word, similarity, activeChip, allChips) {
-  const token = currentTokens.find((t) => t.is_word && t.position === item.position);
-  if (token) token.text = word;
-  const span = resultWordSpan(item.position);
-  if (span) span.textContent = word;
+// Same text, but a word that no longer matches its original gets the
+// original struck through in front of it -- "old word crossed and the new
+// word next to it".
+function renderCorrectionView(container) {
+  container.innerHTML = "";
+  for (const token of currentTokens) {
+    if (!token.is_word) {
+      container.appendChild(document.createTextNode(token.text));
+      continue;
+    }
+    const original = originalByPosition.get(token.position);
+    if (original !== undefined && original !== token.text) {
+      const s = document.createElement("s");
+      s.className = "struck";
+      s.textContent = original;
+      container.appendChild(s);
+      container.appendChild(document.createTextNode(" "));
+      container.appendChild(wordSpan(token.text, token.position, "corr"));
+    } else {
+      container.appendChild(wordSpan(token.text, token.position, null));
+    }
+  }
+}
 
-  row.querySelector(".word-link").textContent = word;
-  row.querySelector(".similarity-cell").textContent = similarityLabel(similarity);
-  row.classList.toggle("is-reset", word === item.original);
-  for (const chip of allChips) chip.classList.toggle("active", chip === activeChip);
+// Two galleys side by side: the untouched original text on the left, the
+// current text on the right with changed words picked out in red -- the
+// pairing is drawn as marks in the gutter between them, see computeGutterMarks().
+function renderDuplicateView() {
+  els.galleyOriginalText.innerHTML = "";
+  for (const token of currentTokens) {
+    if (!token.is_word) {
+      els.galleyOriginalText.appendChild(document.createTextNode(token.text));
+      continue;
+    }
+    const original = originalByPosition.get(token.position);
+    els.galleyOriginalText.appendChild(document.createTextNode(original !== undefined ? original : token.text));
+  }
+  renderPlainViewWithCorrections(els.galleySetText);
+}
+
+function renderPlainViewWithCorrections(container) {
+  container.innerHTML = "";
+  for (const token of currentTokens) {
+    if (!token.is_word) {
+      container.appendChild(document.createTextNode(token.text));
+      continue;
+    }
+    const original = originalByPosition.get(token.position);
+    const changed = original !== undefined && original !== token.text;
+    container.appendChild(wordSpan(token.text, token.position, changed ? "corr" : null));
+  }
+}
+
+// Places a small mark in the gutter at the vertical center of every changed
+// word in the "Set" galley -- run only while the Duplicate view is actually
+// visible, since a hidden element has no layout to measure.
+function computeGutterMarks() {
+  els.gutter.innerHTML = "";
+  const gutterRect = els.gutter.getBoundingClientRect();
+  for (const token of currentTokens) {
+    if (!token.is_word) continue;
+    const original = originalByPosition.get(token.position);
+    if (original === undefined || original === token.text) continue;
+    const span = els.galleySetText.querySelector('.result-word[data-position="' + token.position + '"]');
+    if (!span) continue;
+    const rect = span.getBoundingClientRect();
+    const mark = document.createElement("span");
+    mark.className = "mark";
+    mark.setAttribute("aria-hidden", "true");
+    mark.textContent = "⌐";
+    mark.style.top = (rect.top - gutterRect.top + rect.height / 2) + "px";
+    els.gutter.appendChild(mark);
+  }
+}
+
+let gutterResizeTimer = null;
+window.addEventListener("resize", () => {
+  if (currentMode !== "duplicate" || els.pageResult.hidden) return;
+  clearTimeout(gutterResizeTimer);
+  gutterResizeTimer = setTimeout(computeGutterMarks, 150);
+});
+
+function setMode(mode) {
+  currentMode = mode;
+  els.viewBlack.hidden = mode !== "black";
+  els.viewBlackRed.hidden = mode !== "blackred";
+  els.viewDuplicate.hidden = mode !== "duplicate";
+  for (const key of els.ribbonKeys) {
+    const active = key.dataset.mode === mode;
+    key.classList.toggle("active", active);
+    key.setAttribute("aria-checked", active ? "true" : "false");
+  }
+  if (highlightedWord) {
+    highlightedWord.classList.remove("highlight");
+    highlightedWord = null;
+  }
+  if (mode === "duplicate") computeGutterMarks();
+}
+
+function activeViewContainer() {
+  if (currentMode === "black") return els.viewBlack;
+  if (currentMode === "blackred") return els.viewBlackRed;
+  return els.galleySetText;
 }
 
 function resultWordSpan(position) {
-  return els.result.querySelector('.result-word[data-position="' + position + '"]');
+  return activeViewContainer().querySelector('.result-word[data-position="' + position + '"]');
 }
 
-// Gives that word's span in the result view a real, persistent highlight
-// (clearing any previous one) and scrolls it to the center of the box --
-// more visible and more reliable than a native text selection, which is easy
-// to lose among 500 words and disappears the moment focus moves elsewhere.
+// Gives that word's span in the currently active view a real, persistent
+// highlight (clearing any previous one) and scrolls it to the center of the
+// page -- more visible and more reliable than a native text selection, which
+// is easy to lose among 500 words and disappears the moment focus moves on.
 function jumpToWord(position) {
   const span = resultWordSpan(position);
   if (!span) return;
@@ -234,11 +268,137 @@ function jumpToWord(position) {
   span.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
+// ============================= corrections cards =============================
+
+function renderResult(data) {
+  els.pageResult.hidden = false;
+  els.correctionsPanel.hidden = false;
+  currentTokens = data.tokens.map((t) => ({ ...t }));
+  originalByPosition = new Map(data.replacements.map((r) => [r.position, r.original]));
+  highlightedWord = null;
+  renderAllViews();
+
+  els.correctionsHeading.textContent =
+    data.substitution_count + " correction" + (data.substitution_count === 1 ? "" : "s");
+
+  els.cardsRow.innerHTML = "";
+  for (const item of data.replacements) {
+    els.cardsRow.appendChild(buildCard(item));
+  }
+}
+
+function buildCard(item) {
+  const card = document.createElement("div");
+  card.className = "idx-card";
+  card.dataset.position = item.position;
+
+  const words = document.createElement("div");
+  words.className = "words";
+  const originalSpan = document.createElement("span");
+  originalSpan.className = "word-original";
+  originalSpan.textContent = item.original + " →";
+  const wordLink = document.createElement("button");
+  wordLink.type = "button";
+  wordLink.className = "word-link";
+  wordLink.textContent = item.replacement;
+  wordLink.title = "Find this word in the page";
+  wordLink.addEventListener("click", () => jumpToWord(item.position));
+  const sim = document.createElement("span");
+  sim.className = "sim";
+  sim.textContent = similarityLabel(item.similarity);
+  words.appendChild(originalSpan);
+  words.appendChild(wordLink);
+  words.appendChild(sim);
+  card.appendChild(words);
+
+  const altsRow = document.createElement("div");
+  altsRow.className = "alts";
+  const chips = [];
+  for (const alt of item.alternatives) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "alt-chip";
+    chip.textContent = alt.word + " " + similarityLabel(alt.similarity);
+    chip.addEventListener("click", () => applyChoice(card, item, alt.word, alt.similarity, chip, chips));
+    chips.push(chip);
+    altsRow.appendChild(chip);
+  }
+  if (item.alternatives.length > 0) card.appendChild(altsRow);
+
+  const resetBtn = document.createElement("button");
+  resetBtn.type = "button";
+  resetBtn.className = "reset-link";
+  resetBtn.textContent = "Reset";
+  resetBtn.addEventListener("click", () => applyChoice(card, item, item.original, null, null, chips));
+  card.appendChild(resetBtn);
+
+  return card;
+}
+
+// Sets `word` as the currently-applied text at `item.position`, re-renders
+// every view from the updated tokens, and updates this card's own display.
+function applyChoice(card, item, word, similarity, activeChip, allChips) {
+  const token = currentTokens.find((t) => t.is_word && t.position === item.position);
+  if (token) token.text = word;
+  renderAllViews();
+
+  card.querySelector(".word-link").textContent = word;
+  card.querySelector(".sim").textContent = similarityLabel(similarity);
+  card.classList.toggle("is-reset", word === item.original);
+  for (const chip of allChips) chip.classList.toggle("active", chip === activeChip);
+}
+
+// ============================= sources popover =============================
+
 function checkedSources() {
   return Array.from(els.sourceCheckboxes)
     .filter((checkbox) => checkbox.checked)
     .map((checkbox) => checkbox.value);
 }
+
+function updateSourcesSummary() {
+  const checked = checkedSources();
+  if (checked.length === 0) {
+    els.sourcesSummary.textContent = "none";
+  } else if (checked.length === 1) {
+    els.sourcesSummary.textContent = checked[0];
+  } else {
+    els.sourcesSummary.textContent = checked[0] + " +" + (checked.length - 1);
+  }
+}
+
+els.sourcesBtn.addEventListener("click", (event) => {
+  event.stopPropagation();
+  const isOpen = !els.sourcesPanel.hidden;
+  els.sourcesPanel.hidden = isOpen;
+  els.sourcesBtn.setAttribute("aria-expanded", String(!isOpen));
+});
+document.addEventListener("click", (event) => {
+  if (els.sourcesPanel.hidden) return;
+  if (els.sourcesPanel.contains(event.target) || els.sourcesBtn.contains(event.target)) return;
+  els.sourcesPanel.hidden = true;
+  els.sourcesBtn.setAttribute("aria-expanded", "false");
+});
+for (const checkbox of els.sourceCheckboxes) {
+  checkbox.addEventListener("change", updateSourcesSummary);
+}
+
+// ============================= toggles =============================
+
+function bindToggle(button) {
+  button.addEventListener("click", () => {
+    const pressed = button.getAttribute("aria-pressed") === "true";
+    button.setAttribute("aria-pressed", String(!pressed));
+  });
+}
+bindToggle(els.slideToggle);
+bindToggle(els.multiwordToggle);
+
+for (const key of els.ribbonKeys) {
+  key.addEventListener("click", () => setMode(key.dataset.mode));
+}
+
+// ============================= rewrite =============================
 
 async function rewrite() {
   const text = els.text.value;
@@ -255,15 +415,15 @@ async function rewrite() {
   hideError();
   setBusy(true);
   const usesOnlineSource = sources.some((name) => name !== "wordnet");
-  setStatus(usesOnlineSource ? "Rewriting… (online sources can take a while)" : "Rewriting…");
+  setStatus(usesOnlineSource ? "Striking… (online sources can take a while)" : "Striking…");
 
   const payload = {
     text: text,
     every: Number(els.every.value) || 5,
-    slide: els.slide.checked,
+    slide: els.slideToggle.getAttribute("aria-pressed") === "true",
     senses: Number(els.senses.value) || 3,
     threshold: Number(els.threshold.value),
-    allow_multiword: els.allowMultiword.checked,
+    allow_multiword: els.multiwordToggle.getAttribute("aria-pressed") === "true",
     sources: sources,
   };
 

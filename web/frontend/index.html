@@ -7,163 +7,123 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="glow glow-a" aria-hidden="true"></div>
-  <div class="glow glow-b" aria-hidden="true"></div>
-
-  <header>
-    <div class="brand">
-      <span class="logo" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round">
-          <path d="M7 7h11l-3-3M17 17H6l3 3" />
-        </svg>
-      </span>
-      <div>
-        <h1>synreplace</h1>
-        <p class="subtitle">Replace every N-th word with its closest synonym.</p>
+  <header class="masthead">
+    <div class="masthead-row">
+      <div class="brand">
+        <p class="wordmark">synreplace</p>
+        <p class="tagline">Replace every N-th word with its closest synonym.</p>
       </div>
+      <button id="sample-btn" type="button" class="key key-lg">Sample text</button>
     </div>
   </header>
 
   <main>
-    <section class="panel">
-      <div class="text-header">
-        <label for="text">Text</label>
-        <button id="sample-btn" type="button" class="secondary">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round" class="icon">
-            <path d="M9 2h6l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z" />
-            <path d="M9 13h6M9 17h6M9 9h1" />
-          </svg>
-          Paste sample text (500 words)
+    <div class="strip" id="control-strip">
+      <div class="strip-seg">
+        <label class="tiny" for="every">Every</label>
+        <input type="number" id="every" min="1" value="5" class="strip-input" />
+      </div>
+      <div class="strip-seg">
+        <label class="tiny" for="senses">Senses</label>
+        <input type="number" id="senses" min="1" value="3" class="strip-input" />
+      </div>
+      <div class="strip-seg strip-seg-wide">
+        <label class="tiny" for="threshold">Threshold <span id="threshold-value" class="value-tag">0.95</span></label>
+        <input type="range" id="threshold" min="0" max="1" step="0.01" value="0.95" />
+      </div>
+      <div class="strip-seg strip-seg-check">
+        <button type="button" class="check-toggle" id="slide-toggle" aria-pressed="false">
+          <span class="box" aria-hidden="true"></span> Slide
         </button>
       </div>
-      <textarea id="text" rows="10" placeholder="Paste or type your text here&hellip;"></textarea>
-      <div class="word-count" id="word-count">0 words</div>
-
-      <div class="controls">
-        <div class="field">
-          <label for="every">Every N-th word</label>
-          <input type="number" id="every" min="1" value="5" />
-          <p class="field-hint">Replace word 1, then every Nth word after it.</p>
-        </div>
-        <div class="field">
-          <label for="senses">Senses (K)</label>
-          <input type="number" id="senses" min="1" value="3" />
-          <p class="field-hint">How many candidate meanings to search before ranking.</p>
-        </div>
-        <div class="field field-wide">
-          <label for="threshold">Threshold <span id="threshold-value" class="value-badge">0.95</span></label>
-          <input type="range" id="threshold" min="0" max="1" step="0.01" value="0.95" />
-          <p class="field-hint">Minimum similarity a non-dominant sense must clear, per source.</p>
-        </div>
-        <div class="field switch-field">
-          <label class="switch">
-            <input type="checkbox" id="slide" />
-            <span class="switch-track" aria-hidden="true"></span>
-            <span class="switch-label">Slide</span>
-          </label>
-          <p class="field-hint">Try the next word if this one has no synonym.</p>
-        </div>
-        <div class="field switch-field">
-          <label class="switch">
-            <input type="checkbox" id="allow_multiword" />
-            <span class="switch-track" aria-hidden="true"></span>
-            <span class="switch-label">Allow multi-word</span>
-          </label>
-          <p class="field-hint">Allow synonyms like "give up".</p>
-        </div>
-        <div class="field field-full">
-          <label id="sources-label">Sources</label>
-          <div class="source-picker" role="group" aria-labelledby="sources-label">
-            <label class="source-option">
-              <input type="checkbox" class="source-checkbox" value="wordnet" checked />
-              <span class="source-name">WordNet</span>
-              <span class="source-tag">offline</span>
-            </label>
-            <label class="source-option">
-              <input type="checkbox" class="source-checkbox" value="datamuse" />
-              <span class="source-name">Datamuse</span>
-              <span class="source-tag source-tag-online">online</span>
-            </label>
-            <label class="source-option">
-              <input type="checkbox" class="source-checkbox" value="dictionaryapi" />
-              <span class="source-name">Free Dictionary API</span>
-              <span class="source-tag source-tag-online">online</span>
-            </label>
-          </div>
-          <p class="field-hint">
-            Pick one or more &mdash; results from every checked source are pooled
-            together. Senses/Threshold above apply to every source, though
-            what they mean varies by source &mdash; see
-            <a href="/docs" target="_blank" rel="noopener">the API docs</a> for details.
-          </p>
-        </div>
-      </div>
-
-      <div class="actions">
-        <button id="rewrite-btn" type="button" class="primary">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round" class="icon spinner" id="rewrite-spinner" hidden>
-            <path d="M21 12a9 9 0 1 1-9-9" />
-          </svg>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round" class="icon" id="rewrite-icon">
-            <path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.3 5.6L21 11l-5.7 2.4L13 19l-2.3-5.6L5 11l5.7-2.4Z" />
-          </svg>
-          <span>Rewrite</span>
+      <div class="strip-seg strip-seg-check">
+        <button type="button" class="check-toggle" id="multiword-toggle" aria-pressed="false">
+          <span class="box" aria-hidden="true"></span> Multi&#8209;word
         </button>
-        <span id="status" role="status" aria-live="polite"></span>
       </div>
-      <div class="loading-bar" id="loading-bar" hidden>
-        <div class="loading-bar-fill"></div>
+      <div class="strip-seg strip-seg-sources">
+        <button type="button" class="sources-btn" id="sources-btn" aria-expanded="false" aria-haspopup="true">
+          <span class="tiny">Sources</span>
+          <span id="sources-summary">wordnet</span>
+        </button>
+        <div class="sources-panel" id="sources-panel" hidden>
+          <label class="source-row">
+            <input type="checkbox" class="source-checkbox" value="wordnet" checked />
+            WordNet <span class="tag">offline</span>
+          </label>
+          <label class="source-row">
+            <input type="checkbox" class="source-checkbox" value="datamuse" />
+            Datamuse <span class="tag online">online</span>
+          </label>
+          <label class="source-row">
+            <input type="checkbox" class="source-checkbox" value="dictionaryapi" />
+            Free Dictionary API <span class="tag online">online</span>
+          </label>
+          <p class="sources-hint">Checked sources are pooled together. Every
+            field above applies to all of them &mdash; see
+            <a href="/docs" target="_blank" rel="noopener">the API docs</a>
+            for what each means per source.</p>
+        </div>
       </div>
-    </section>
 
-    <section class="panel result-panel" id="result-panel" hidden>
-      <div class="result-header">
-        <span id="result-label">Result</span>
+      <div class="strip-fill"></div>
+
+      <div class="strip-seg strip-seg-keys">
+        <span class="tiny">Ribbon</span>
+        <div class="keys" id="ribbon-keys" role="radiogroup" aria-label="Result view">
+          <button type="button" class="key active" data-mode="black" role="radio" aria-checked="true">Black</button>
+          <button type="button" class="key" data-mode="blackred" role="radio" aria-checked="false">Blk+Red</button>
+          <button type="button" class="key" data-mode="duplicate" role="radio" aria-checked="false">Dupl.</button>
+        </div>
+      </div>
+      <button id="rewrite-btn" type="button" class="stamp-btn">
+        <span id="rewrite-label">Strike</span>
+      </button>
+    </div>
+    <div class="strip-status">
+      <span id="status" role="status" aria-live="polite"></span>
+    </div>
+    <div class="loading-bar" id="loading-bar" hidden>
+      <div class="loading-bar-fill"></div>
+    </div>
+
+    <section class="page-frame">
+      <div class="page-input-head">
+        <label class="tiny" for="text">Page</label>
+        <span class="word-count" id="word-count">0 words</span>
+      </div>
+      <textarea id="text" class="page-input" rows="12" placeholder="Paste or type your text here&hellip;"></textarea>
+
+      <div class="page-result" id="page-result" hidden>
         <div class="result-actions">
-          <button id="copy-btn" type="button" class="secondary">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round" class="icon">
-              <rect x="9" y="9" width="12" height="12" rx="2" />
-              <path d="M5 15V5a2 2 0 0 1 2-2h10" />
-            </svg>
-            Copy
-          </button>
-          <button id="download-btn" type="button" class="secondary">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round" class="icon">
-              <path d="M12 3v12m0 0-4-4m4 4 4-4M4 19h16" />
-            </svg>
-            Download .txt
-          </button>
+          <button id="copy-btn" type="button" class="key">Copy</button>
+          <button id="download-btn" type="button" class="key">Download .txt</button>
         </div>
-      </div>
-      <div id="result" class="result-box" role="textbox" aria-readonly="true"
-           aria-labelledby="result-label" tabindex="0"></div>
 
-      <h2 id="substitutions-heading"></h2>
-      <div class="table-wrap">
-        <table id="substitutions">
-          <thead>
-            <tr>
-              <th>#</th><th>Original</th><th>Current</th><th>Similarity</th>
-              <th>Other choices</th><th></th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+        <div id="view-black" class="result-view"></div>
+
+        <div id="view-blackred" class="result-view" hidden></div>
+
+        <div id="view-duplicate" class="result-view result-galleys" hidden>
+          <div class="galley" id="galley-original">
+            <span class="tiny">Original</span>
+            <div class="galley-text"></div>
+          </div>
+          <div class="gutter" id="gutter"></div>
+          <div class="galley" id="galley-set">
+            <span class="tiny">Set</span>
+            <div class="galley-text"></div>
+          </div>
+        </div>
       </div>
     </section>
 
-    <section class="panel error" id="error-panel" hidden>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-           stroke-linecap="round" stroke-linejoin="round" class="icon">
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 8v5M12 16h.01" />
-      </svg>
+    <section class="corrections" id="corrections-panel" hidden>
+      <h2 id="corrections-heading"></h2>
+      <div class="cards-row" id="cards-row"></div>
+    </section>
+
+    <section class="error" id="error-panel" hidden>
       <p id="error-message"></p>
     </section>
   </main>

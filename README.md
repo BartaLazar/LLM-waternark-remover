@@ -251,20 +251,24 @@ self-contained folder with its own setup and its own server, independent of
 this CLI. See [`web/README.md`](web/README.md) to run it, and
 [`web/docs/API.md`](web/docs/API.md) for the REST API reference.
 
-![synreplace web interface, showing the controls, a rewritten result, and the substitutions table](docs/web-ui.png)
+![synreplace web interface, showing the controls, and a rewritten result in the side-by-side Duplicate view with corrections marked in the gutter](docs/web-ui.png)
 
 A few things it adds on top of the CLI:
 
+- **Three ways to view a result**, switched with the Ribbon selector (a nod
+  to a typewriter's black/black+red ribbon lever): **Black** shows just the
+  plain result; **Blk+Red** marks each change inline, original struck through
+  next to its replacement; **Dupl.** shows the original and the result side
+  by side, with a proofreader's mark in the gutter next to every changed line.
 - **Pick and pool sources visually** — check any combination of WordNet,
   Datamuse and the Free Dictionary API; results are merged live.
-- **Reset or swap any substitution.** Every row in the substitutions table has
-  a Reset button back to the original word, plus up to 3 alternative-synonym
-  chips to swap in instead — the result text updates immediately, no re-run
-  needed.
-- **Click a changed word to find it.** Clicking a word in the table highlights
-  and scrolls to its exact spot in the result text.
-- **Live parameter descriptions** under every control, and a loading indicator
-  while a request is in flight (the online sources can take a few seconds).
+- **Reset or swap any correction.** Every card below the result has a Reset
+  button back to the original word, plus up to 3 alternative-synonym chips to
+  swap in instead — every view updates immediately, no re-run needed.
+- **Click a changed word to find it.** Clicking a word in its card highlights
+  and scrolls to its exact spot in whichever view is currently showing.
+- **A loading indicator** while a request is in flight (the online sources
+  can take a few seconds).
 
 ## Project layout
 
