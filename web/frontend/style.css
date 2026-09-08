@@ -202,7 +202,13 @@ textarea:focus, input[type="number"]:focus, .result-box:focus {
 .controls {
   display: flex;
   flex-wrap: wrap;
-  align-items: end;
+  /* Was align-items: end, back when every field was just a label + one
+     control of near-identical height. Each field now also carries a
+     .field-hint caption that wraps to a different number of lines depending
+     on its length, so bottom-aligning would stagger the inputs themselves
+     out of line with each other. Top-aligning keeps the controls in one row
+     regardless of how each field's hint wraps. */
+  align-items: start;
   gap: 1.1rem;
   margin-top: 1.25rem;
 }
@@ -291,8 +297,11 @@ input[type="range"]::-moz-range-thumb {
   cursor: pointer;
 }
 
-/* Toggle switches (replace plain checkboxes for slide / allow-multiword) */
-.switch-field { display: flex; align-items: center; }
+/* Toggle switches (replace plain checkboxes for slide / allow-multiword).
+   Column, not row: a switch-field now holds the switch itself plus a
+   .field-hint caption below it, and the default row direction was laying
+   those two out side by side instead of stacked. */
+.switch-field { display: flex; flex-direction: column; align-items: start; gap: 0.6rem; }
 .switch {
   display: inline-flex;
   align-items: center;
