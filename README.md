@@ -285,16 +285,16 @@ A few things it adds on top of the CLI:
 ## Project layout
 
 ```
-synreplace/    The CLI + library: WordNet lookup, the two online sources,
-               inflection, tokenizer, and the rewrite engine every entry
-               point (CLI/library/API/UI) shares.
-tests/         Tracked test suite (see Tests below).
-web/           The browser UI + REST API, a separate app that reuses the
-               synreplace engine; see web/README.md.
-  backend/     FastAPI app (routes, request/response schemas).
-  frontend/    Plain HTML/CSS/JS, no build step.
-  docs/API.md  REST API reference.
-docs/          Screenshots and other assets used in this README.
+├── synreplace/      The CLI + library: WordNet lookup, the two online sources,
+│                    inflection, tokenizer, and the rewrite engine every entry
+│                    point (CLI/library/API/UI) shares.
+├── tests/           Tracked test suite (see Tests below).
+├── web/             The browser UI + REST API, a separate app that reuses the
+│                    synreplace engine; see web/README.md.
+│   ├── backend/     FastAPI app (routes, request/response schemas).
+│   ├── frontend/    Plain HTML/CSS/JS, no build step.
+│   └── docs/API.md  REST API reference.
+└── docs/            Screenshots and other assets used in this README.
 ```
 
 ## Tests
