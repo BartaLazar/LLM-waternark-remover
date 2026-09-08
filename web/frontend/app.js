@@ -189,24 +189,23 @@ function renderCorrectionView(container) {
   }
 }
 
-// A gap token that ends a sentence (or a paragraph break, even without
-// terminal punctuation) -- used to cut currentTokens into rows, see
-// splitIntoRows(). Imperfect on abbreviations ("e.g. word") -- it'll cut
-// there too -- but that only ever affects *where* a row breaks, never
-// whether the two cells of a row agree, since both are built from the same
-// boundaries.
-const SENTENCE_END_RE = /[.!?](["')\]]*)(\s|$)/;
+// A gap token containing a blank line -- used to cut currentTokens into rows
+// at paragraph breaks, see splitIntoRows(). Coarser than cutting at every
+// sentence: a row can still wrap to a different number of lines in each
+// column internally, but a paragraph is short enough that this never reads
+// as drift, and single-paragraph input (most short texts) ends up as one row.
+const PARAGRAPH_BREAK_RE = /\n[ \t]*\n/;
 
-// Cuts a token list into rows at sentence/paragraph boundaries, so a
-// side-by-side comparison can build each row's two cells from the exact
-// same slice of tokens -- they always start and end on the same word,
-// whatever either column's own text happens to wrap to. See renderDuplicateView().
+// Cuts a token list into rows at paragraph boundaries, so a side-by-side
+// comparison can build each row's two cells from the exact same slice of
+// tokens -- they always start and end on the same word, whatever either
+// column's own text happens to wrap to. See renderDuplicateView().
 function splitIntoRows(tokens) {
   const rows = [];
   let current = [];
   for (const token of tokens) {
     current.push(token);
-    if (!token.is_word && (SENTENCE_END_RE.test(token.text) || token.text.includes("\n\n"))) {
+    if (!token.is_word && PARAGRAPH_BREAK_RE.test(token.text)) {
       rows.push(current);
       current = [];
     }
@@ -215,7 +214,7 @@ function splitIntoRows(tokens) {
   return rows;
 }
 
-// One grid row per sentence: an "Original" cell and a "Set" cell built from
+// One grid row per paragraph: an "Original" cell and a "Set" cell built from
 // the same token slice (so they can't drift out of correspondence the way
 // two independently word-wrapped columns would), with a gutter cell between
 // them for computeGutterMarks(). All three are appended straight into the
