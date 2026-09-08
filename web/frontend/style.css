@@ -260,6 +260,8 @@ textarea:focus, input[type="number"]:focus, .result-box:focus {
   font-size: 0.8rem;
   color: var(--muted);
 }
+.field-hint a { color: var(--accent-solid); text-decoration: underline; }
+.field-hint a:hover { color: var(--accent-solid-hover); }
 
 .value-badge {
   font-weight: 700;
