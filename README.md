@@ -54,9 +54,9 @@ The same rewrite, from the browser UI:
   pronunciation rather than spelling, so `a university` and `an hour` both
   still come out right. A candidate that would need an irregular form nobody
   can spell reliably (`go` → `goed`) is skipped rather than guessed at wrong.
-- **Two free online sources, opt-in.** Datamuse and the Free Dictionary API,
-  neither needing a key or signup, usable alone or pooled together with
-  WordNet; see [Synonym sources](#synonym-sources).
+- **A free online source, opt-in.** Datamuse, needing no key or signup,
+  usable alone or pooled together with WordNet; see
+  [Synonym sources](#synonym-sources).
 - **Four ways in: CLI, Python library, REST API, browser UI.** All four run
   the same engine underneath, so the same input and flags give the same
   output everywhere.
@@ -182,16 +182,15 @@ word's single most common sense.
 
 ## Synonym sources
 
-By default `synreplace` looks synonyms up in WordNet, fully offline. Two free
-online dictionary APIs are available too (neither needs an API key or
-signup), and `--sources` accepts more than one at once, pooling every enabled
-source's candidates into one ranked list rather than picking exactly one:
+By default `synreplace` looks synonyms up in WordNet, fully offline. A free
+online dictionary API is available too (needs no API key or signup), and
+`--sources` accepts both at once, pooling their candidates into one ranked
+list rather than picking exactly one:
 
 | Name | What it is | Network? |
 | --- | --- | --- |
 | `wordnet` | The default described above | No |
 | `datamuse` | [Datamuse](https://www.datamuse.com/api/), built specifically for word-relation queries; returns a relevance score per candidate | Yes |
-| `dictionaryapi` | [Free Dictionary API](https://dictionaryapi.dev/), a definitions API with synonyms as a secondary field; coverage varies a lot by word | Yes |
 
 ```bash
 synreplace --sources wordnet,datamuse -v "the quick brown fox jumps over the lazy dog"
@@ -209,15 +208,8 @@ them for its own shape of data rather than ignoring them:
   occasionally surface a synonym for the wrong meaning of a word (e.g. "fox"
   the animal vs. "to fox someone" meaning to trick them) if a wrong-meaning
   result happens to score close to the top one.
-- **`dictionaryapi`**: this API's response is naturally grouped into one
-  entry per meaning of the word, in the order it lists them (its own implicit
-  "most common first"). `--senses` caps how many of those meaning-entries are
-  searched; every candidate from the first one scores 100%, and every
-  candidate from a later one scores a flat 50%, not a measured relatedness
-  value like WordNet's, since this API doesn't expose anything to actually
-  compute one from.
 
-Other trade-offs worth knowing before reaching for the online sources:
+Other trade-offs worth knowing before reaching for the online source:
 
 - **Speed and reliability.** Each distinct word costs one HTTP request (cached
   per run, so a repeated word is free the second time); a slow or unreachable
@@ -225,10 +217,9 @@ Other trade-offs worth knowing before reaching for the online sources:
   no candidates rather than erroring out the whole run; a one-time note is
   printed to stderr the first time that happens.
 - **Similarity numbers aren't on the same scale across sources.** WordNet's is
-  a graph-distance score, Datamuse's is a normalized relevance score, and
-  `dictionaryapi`'s is a fixed 100% for every candidate (no ranking data is
-  available). All three are shown as 0-100% for consistency, but a Datamuse
-  60% and a WordNet 60% don't mean quite the same thing.
+  a graph-distance score, Datamuse's is a normalized relevance score. Both are
+  shown as 0-100% for consistency, but a Datamuse 60% and a WordNet 60% don't
+  mean quite the same thing.
 
 ## What is deliberately left alone
 
@@ -270,8 +261,8 @@ A few things it adds on top of the CLI:
   plain result; **Blk+Red** marks each change inline, original struck through
   next to its replacement; **Dupl.** shows the original and the result side
   by side, with a proofreader's mark in the gutter next to every changed line.
-- **Pick and pool sources visually**: check any combination of WordNet,
-  Datamuse and the Free Dictionary API; results are merged live.
+- **Pick and pool sources visually**: check WordNet, Datamuse, or both;
+  results are merged live.
 - **Reset or swap any correction.** Every card below the result has a Reset
   button back to the original word, plus up to 3 alternative-synonym chips to
   swap in instead; every view updates immediately, no re-run needed.

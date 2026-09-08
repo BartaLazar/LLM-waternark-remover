@@ -18,12 +18,11 @@ one `.venv`, one `requirements.txt`, for the whole project.
   corrections, or side-by-side with the original); the correction card under
   each changed word lets you reset it or swap in one of up to 3 alternative
   synonyms, with every view updating live.
-- **Synonym sources**: WordNet (offline, default), or two free online
-  dictionary APIs that need no key/signup: Datamuse and the Free Dictionary
-  API. Pick one or more in the UI's "Sources" checkboxes; more than one pools
-  their candidates together. See [`docs/API.md`](docs/API.md#synonym-sources)
-  for the trade-offs (network latency, no sense-disambiguation on the online
-  sources).
+- **Synonym sources**: WordNet (offline, default), or Datamuse, a free online
+  dictionary API that needs no key/signup. Pick one or both in the UI's
+  "Sources" checkboxes; using both pools their candidates together. See
+  [`docs/API.md`](docs/API.md#synonym-sources) for the trade-offs (network
+  latency, no sense-disambiguation on the online source).
 - **API reference**: see [`docs/API.md`](docs/API.md) for the full endpoint
   documentation, or run the server and open `/docs` for the live,
   auto-generated (Swagger) version of the same thing.
