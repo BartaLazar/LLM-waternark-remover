@@ -35,6 +35,7 @@ const els = {
   rewriteBtn: document.getElementById("rewrite-btn"),
   rewriteIcon: document.getElementById("rewrite-icon"),
   rewriteSpinner: document.getElementById("rewrite-spinner"),
+  loadingBar: document.getElementById("loading-bar"),
   sampleBtn: document.getElementById("sample-btn"),
   status: document.getElementById("status"),
   resultPanel: document.getElementById("result-panel"),
@@ -70,6 +71,7 @@ function setBusy(isBusy) {
   els.rewriteBtn.disabled = isBusy;
   els.rewriteSpinner.hidden = !isBusy;
   els.rewriteIcon.hidden = isBusy;
+  els.loadingBar.hidden = !isBusy;
 }
 
 function showError(message) {
