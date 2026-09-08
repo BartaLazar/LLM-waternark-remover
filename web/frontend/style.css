@@ -400,14 +400,34 @@ input[type="range"]::-moz-range-thumb {
 .corr:hover { text-decoration-color: var(--ribbon); }
 .struck { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--muted); }
 
+.galleys-head {
+  display: grid;
+  grid-template-columns: 1fr 26px 1fr;
+  margin-bottom: 0.4rem;
+}
+.galleys-head .tiny:last-child { grid-column: 3; }
+
+/* One CSS grid row per sentence: renderDuplicateView() appends an
+   Original/gutter/Set cell triplet per row, in order, straight into this
+   grid -- every 3rd child starts a new implicit row, sized to whichever of
+   its two text cells is taller, so the pair can never drift apart the way
+   two independently word-wrapped columns would. */
 .result-galleys {
   display: grid;
   grid-template-columns: 1fr 26px 1fr;
 }
-.galley .tiny { margin-bottom: 0.55rem; }
-.galley-text { font-size: 0.88rem; line-height: 1.9; }
-.gutter { position: relative; border-left: 1px dotted var(--border); border-right: 1px dotted var(--border); }
-.gutter .mark {
+.gcell { font-size: 0.88rem; line-height: 1.9; }
+.gcell-original, .gcell-set {
+  padding: 0.55rem 0;
+  border-bottom: 1px dashed var(--border);
+}
+.gcell-gutter {
+  position: relative;
+  border-left: 1px dotted var(--border);
+  border-right: 1px dotted var(--border);
+  border-bottom: 1px dashed var(--border);
+}
+.gcell-gutter .mark {
   position: absolute;
   left: 50%;
   transform: translate(-50%, -0.55em);
@@ -418,8 +438,12 @@ input[type="range"]::-moz-range-thumb {
 
 @media (max-width: 640px) {
   .result-galleys { grid-template-columns: 1fr; }
-  .gutter { display: none; }
-  .galley + .galley { margin-top: 1.2rem; padding-top: 1.2rem; border-top: 1px dashed var(--border); }
+  .gcell-gutter { display: none; }
+  .gcell-original:not(:first-child) {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px dashed var(--border);
+  }
 }
 
 /* ============================= corrections ============================= */

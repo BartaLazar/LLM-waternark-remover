@@ -103,16 +103,15 @@
 
         <div id="view-blackred" class="result-view" hidden></div>
 
-        <div id="view-duplicate" class="result-view result-galleys" hidden>
-          <div class="galley" id="galley-original">
+        <div id="view-duplicate" class="result-view" hidden>
+          <div class="galleys-head">
             <span class="tiny">Original</span>
-            <div class="galley-text"></div>
-          </div>
-          <div class="gutter" id="gutter"></div>
-          <div class="galley" id="galley-set">
             <span class="tiny">Set</span>
-            <div class="galley-text"></div>
           </div>
+          <!-- Filled by app.js with one row (original cell, gutter cell, set
+               cell) per sentence, so a row's two cells are always built from
+               the same word range -- see renderDuplicateView(). -->
+          <div class="result-galleys" id="galleys-grid"></div>
         </div>
       </div>
     </section>

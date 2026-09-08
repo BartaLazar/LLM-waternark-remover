@@ -45,9 +45,7 @@ const els = {
   viewBlack: document.getElementById("view-black"),
   viewBlackRed: document.getElementById("view-blackred"),
   viewDuplicate: document.getElementById("view-duplicate"),
-  galleyOriginalText: document.querySelector("#galley-original .galley-text"),
-  galleySetText: document.querySelector("#galley-set .galley-text"),
-  gutter: document.getElementById("gutter"),
+  galleysGrid: document.getElementById("galleys-grid"),
   correctionsPanel: document.getElementById("corrections-panel"),
   correctionsHeading: document.getElementById("corrections-heading"),
   cardsRow: document.getElementById("cards-row"),
@@ -191,54 +189,87 @@ function renderCorrectionView(container) {
   }
 }
 
-// Two galleys side by side: the untouched original text on the left, the
-// current text on the right with changed words picked out in red -- the
-// pairing is drawn as marks in the gutter between them, see computeGutterMarks().
+// A gap token that ends a sentence (or a paragraph break, even without
+// terminal punctuation) -- used to cut currentTokens into rows, see
+// splitIntoRows(). Imperfect on abbreviations ("e.g. word") -- it'll cut
+// there too -- but that only ever affects *where* a row breaks, never
+// whether the two cells of a row agree, since both are built from the same
+// boundaries.
+const SENTENCE_END_RE = /[.!?](["')\]]*)(\s|$)/;
+
+// Cuts a token list into rows at sentence/paragraph boundaries, so a
+// side-by-side comparison can build each row's two cells from the exact
+// same slice of tokens -- they always start and end on the same word,
+// whatever either column's own text happens to wrap to. See renderDuplicateView().
+function splitIntoRows(tokens) {
+  const rows = [];
+  let current = [];
+  for (const token of tokens) {
+    current.push(token);
+    if (!token.is_word && (SENTENCE_END_RE.test(token.text) || token.text.includes("\n\n"))) {
+      rows.push(current);
+      current = [];
+    }
+  }
+  if (current.length) rows.push(current);
+  return rows;
+}
+
+// One grid row per sentence: an "Original" cell and a "Set" cell built from
+// the same token slice (so they can't drift out of correspondence the way
+// two independently word-wrapped columns would), with a gutter cell between
+// them for computeGutterMarks(). All three are appended straight into the
+// #galleys-grid CSS grid, which auto-places every 3 children into one grid
+// row and sizes that row to whichever cell is taller -- no per-row wrapper
+// element needed.
 function renderDuplicateView() {
-  els.galleyOriginalText.innerHTML = "";
-  for (const token of currentTokens) {
-    if (!token.is_word) {
-      els.galleyOriginalText.appendChild(document.createTextNode(token.text));
-      continue;
+  els.galleysGrid.innerHTML = "";
+  for (const rowTokens of splitIntoRows(currentTokens)) {
+    const originalCell = document.createElement("div");
+    originalCell.className = "gcell gcell-original";
+    const gutterCell = document.createElement("div");
+    gutterCell.className = "gcell gcell-gutter";
+    const setCell = document.createElement("div");
+    setCell.className = "gcell gcell-set";
+
+    for (const token of rowTokens) {
+      if (!token.is_word) {
+        originalCell.appendChild(document.createTextNode(token.text));
+        setCell.appendChild(document.createTextNode(token.text));
+        continue;
+      }
+      const original = originalByPosition.get(token.position);
+      originalCell.appendChild(document.createTextNode(original !== undefined ? original : token.text));
+      const changed = correctionPositions.has(token.position) && original !== token.text;
+      setCell.appendChild(wordSpan(token.text, token.position, changed ? "corr" : null));
     }
-    const original = originalByPosition.get(token.position);
-    els.galleyOriginalText.appendChild(document.createTextNode(original !== undefined ? original : token.text));
+
+    els.galleysGrid.appendChild(originalCell);
+    els.galleysGrid.appendChild(gutterCell);
+    els.galleysGrid.appendChild(setCell);
   }
-  renderPlainViewWithCorrections(els.galleySetText);
 }
 
-function renderPlainViewWithCorrections(container) {
-  container.innerHTML = "";
-  for (const token of currentTokens) {
-    if (!token.is_word) {
-      container.appendChild(document.createTextNode(token.text));
-      continue;
-    }
-    const original = originalByPosition.get(token.position);
-    const changed = correctionPositions.has(token.position) && original !== token.text;
-    container.appendChild(wordSpan(token.text, token.position, changed ? "corr" : null));
-  }
-}
-
-// Places a small mark in the gutter at the vertical center of every changed
-// word in the "Set" galley -- run only while the Duplicate view is actually
-// visible, since a hidden element has no layout to measure.
+// Places a small mark in each row's own gutter cell, at the vertical center
+// of every changed word in that row's "Set" cell -- run only while the
+// Duplicate view is actually visible, since a hidden element has no layout
+// to measure.
 function computeGutterMarks() {
-  els.gutter.innerHTML = "";
-  const gutterRect = els.gutter.getBoundingClientRect();
-  for (const token of currentTokens) {
-    if (!token.is_word) continue;
-    const original = originalByPosition.get(token.position);
-    if (!correctionPositions.has(token.position) || original === token.text) continue;
-    const span = els.galleySetText.querySelector('.result-word[data-position="' + token.position + '"]');
-    if (!span) continue;
-    const rect = span.getBoundingClientRect();
-    const mark = document.createElement("span");
-    mark.className = "mark";
-    mark.setAttribute("aria-hidden", "true");
-    mark.textContent = "⌐";
-    mark.style.top = (rect.top - gutterRect.top + rect.height / 2) + "px";
-    els.gutter.appendChild(mark);
+  const cells = els.galleysGrid.children;
+  for (let i = 0; i < cells.length; i += 3) {
+    const gutterCell = cells[i + 1];
+    const setCell = cells[i + 2];
+    gutterCell.innerHTML = "";
+    const gutterRect = gutterCell.getBoundingClientRect();
+    for (const span of setCell.querySelectorAll(".corr")) {
+      const rect = span.getBoundingClientRect();
+      const mark = document.createElement("span");
+      mark.className = "mark";
+      mark.setAttribute("aria-hidden", "true");
+      mark.textContent = "⌐";
+      mark.style.top = (rect.top - gutterRect.top + rect.height / 2) + "px";
+      gutterCell.appendChild(mark);
+    }
   }
 }
 
@@ -266,7 +297,7 @@ function setMode(mode) {
 function activeViewContainer() {
   if (currentMode === "black") return els.viewBlack;
   if (currentMode === "blackred") return els.viewBlackRed;
-  return els.galleySetText;
+  return els.galleysGrid;
 }
 
 function resultWordSpan(position) {
