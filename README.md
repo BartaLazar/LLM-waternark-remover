@@ -265,10 +265,12 @@ A few things it adds on top of the CLI:
 - **Reset or swap any correction.** Every card below the result has a Reset
   button back to the original word, plus up to 3 alternative-synonym chips to
   swap in instead — every view updates immediately, no re-run needed.
-- **Click a changed word to find it.** Clicking a word in its card highlights
-  and scrolls to its exact spot in whichever view is currently showing.
+- **Jump between a word and its card, either way.** Click a card to highlight
+  its word in the page; in Blk+Red or Dupl., click a red word to jump back to
+  its card. Either one leaves a real inverted-color box in place for 5s.
 - **A loading indicator** while a request is in flight (the online sources
-  can take a few seconds).
+  can take a few seconds), and a **?** field guide with a one-line
+  explanation of every control.
 
 ## Project layout
 

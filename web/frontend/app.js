@@ -55,6 +55,9 @@ const els = {
   downloadBtn: document.getElementById("download-btn"),
   errorPanel: document.getElementById("error-panel"),
   errorMessage: document.getElementById("error-message"),
+  helpBtn: document.getElementById("help-btn"),
+  helpOverlay: document.getElementById("help-overlay"),
+  helpClose: document.getElementById("help-close"),
 };
 
 // The last rewrite response's full token list (words + the gaps between
@@ -74,6 +77,9 @@ let currentMode = "black";
 
 // The <span class="result-word"> currently highlighted by jumpToWord(), if any.
 let highlightedWord = null;
+
+// The <div class="idx-card"> currently highlighted by jumpToCard(), if any.
+let highlightedCard = null;
 
 function setStatus(message) {
   els.status.textContent = message;
@@ -129,6 +135,12 @@ function wordSpan(text, position, extraClass) {
   span.className = "result-word" + (extraClass ? " " + extraClass : "");
   span.dataset.position = position;
   span.textContent = text;
+  // A "corr" span is a replaced word shown in Blk+Red or Duplicate -- clicking
+  // it jumps to (and highlights) its card instead of highlighting itself, the
+  // reverse of a card's word-link. See jumpToCard().
+  if (extraClass === "corr") {
+    span.addEventListener("click", () => jumpToCard(position));
+  }
   return span;
 }
 
@@ -238,10 +250,7 @@ function setMode(mode) {
     key.classList.toggle("active", active);
     key.setAttribute("aria-checked", active ? "true" : "false");
   }
-  if (highlightedWord) {
-    highlightedWord.classList.remove("highlight");
-    highlightedWord = null;
-  }
+  clearWordHighlight();
   if (mode === "duplicate") computeGutterMarks();
 }
 
@@ -255,6 +264,30 @@ function resultWordSpan(position) {
   return activeViewContainer().querySelector('.result-word[data-position="' + position + '"]');
 }
 
+// Both jumpToWord() (card -> text) and jumpToCard() (text -> card) leave a
+// real box of inverted color in place for HIGHLIGHT_MS, then clear it --
+// each tracks its own element/timer so highlighting one doesn't cut the
+// other short.
+const HIGHLIGHT_MS = 5000;
+let highlightWordTimer = null;
+let highlightCardTimer = null;
+
+function clearWordHighlight() {
+  clearTimeout(highlightWordTimer);
+  if (highlightedWord) {
+    highlightedWord.classList.remove("highlight");
+    highlightedWord = null;
+  }
+}
+
+function clearCardHighlight() {
+  clearTimeout(highlightCardTimer);
+  if (highlightedCard) {
+    highlightedCard.classList.remove("highlight");
+    highlightedCard = null;
+  }
+}
+
 // Gives that word's span in the currently active view a real, persistent
 // highlight (clearing any previous one) and scrolls it to the center of the
 // page -- more visible and more reliable than a native text selection, which
@@ -262,10 +295,23 @@ function resultWordSpan(position) {
 function jumpToWord(position) {
   const span = resultWordSpan(position);
   if (!span) return;
-  if (highlightedWord) highlightedWord.classList.remove("highlight");
+  clearWordHighlight();
   span.classList.add("highlight");
   highlightedWord = span;
   span.scrollIntoView({ behavior: "smooth", block: "center" });
+  highlightWordTimer = setTimeout(clearWordHighlight, HIGHLIGHT_MS);
+}
+
+// The reverse of jumpToWord(): clicking a replaced word in Blk+Red or
+// Duplicate scrolls to its card in the corrections list and highlights that.
+function jumpToCard(position) {
+  const card = els.cardsRow.querySelector('.idx-card[data-position="' + position + '"]');
+  if (!card) return;
+  clearCardHighlight();
+  card.classList.add("highlight");
+  highlightedCard = card;
+  card.scrollIntoView({ behavior: "smooth", block: "center" });
+  highlightCardTimer = setTimeout(clearCardHighlight, HIGHLIGHT_MS);
 }
 
 // ============================= corrections cards =============================
@@ -275,7 +321,8 @@ function renderResult(data) {
   els.correctionsPanel.hidden = false;
   currentTokens = data.tokens.map((t) => ({ ...t }));
   originalByPosition = new Map(data.replacements.map((r) => [r.position, r.original]));
-  highlightedWord = null;
+  clearWordHighlight();
+  clearCardHighlight();
   renderAllViews();
 
   els.correctionsHeading.textContent =
@@ -291,6 +338,13 @@ function buildCard(item) {
   const card = document.createElement("div");
   card.className = "idx-card";
   card.dataset.position = item.position;
+  card.title = "Find this word in the page";
+  // The whole card jumps to its word in the page -- except its own
+  // alt-chip/Reset controls, which do their own, more specific thing.
+  card.addEventListener("click", (event) => {
+    if (event.target.closest(".alt-chip, .reset-link")) return;
+    jumpToWord(item.position);
+  });
 
   const words = document.createElement("div");
   words.className = "words";
@@ -301,8 +355,6 @@ function buildCard(item) {
   wordLink.type = "button";
   wordLink.className = "word-link";
   wordLink.textContent = item.replacement;
-  wordLink.title = "Find this word in the page";
-  wordLink.addEventListener("click", () => jumpToWord(item.position));
   const sim = document.createElement("span");
   sim.className = "sim";
   sim.textContent = similarityLabel(item.similarity);
@@ -483,6 +535,29 @@ function pasteSampleText() {
   setStatus("Sample text pasted.");
   setTimeout(() => setStatus(""), 1500);
 }
+
+// ============================= help ============================= //
+
+function openHelp() {
+  els.helpOverlay.hidden = false;
+  els.helpBtn.setAttribute("aria-expanded", "true");
+  els.helpClose.focus();
+  document.addEventListener("keydown", onHelpKeydown);
+}
+function closeHelp() {
+  els.helpOverlay.hidden = true;
+  els.helpBtn.setAttribute("aria-expanded", "false");
+  document.removeEventListener("keydown", onHelpKeydown);
+  els.helpBtn.focus();
+}
+function onHelpKeydown(event) {
+  if (event.key === "Escape") closeHelp();
+}
+els.helpBtn.addEventListener("click", openHelp);
+els.helpClose.addEventListener("click", closeHelp);
+els.helpOverlay.addEventListener("click", (event) => {
+  if (event.target === els.helpOverlay) closeHelp();
+});
 
 els.rewriteBtn.addEventListener("click", rewrite);
 els.copyBtn.addEventListener("click", copyResult);

@@ -13,7 +13,10 @@
         <p class="wordmark">synreplace</p>
         <p class="tagline">Replace every N-th word with its closest synonym.</p>
       </div>
-      <button id="sample-btn" type="button" class="key key-lg">Sample text</button>
+      <div class="masthead-actions">
+        <button id="sample-btn" type="button" class="key key-lg">Sample text</button>
+        <button id="help-btn" type="button" class="key key-lg help-btn" aria-haspopup="dialog" aria-expanded="false">?</button>
+      </div>
     </div>
   </header>
 
@@ -131,6 +134,81 @@
   <footer>
     <p>Backed by a local REST API &mdash; see <code>web/docs/API.md</code> for the endpoint reference.</p>
   </footer>
+
+  <div class="help-overlay" id="help-overlay" hidden>
+    <div class="help-panel" role="dialog" aria-modal="true" aria-labelledby="help-title">
+      <div class="help-head">
+        <h2 id="help-title">Field guide</h2>
+        <button type="button" class="help-close" id="help-close" aria-label="Close">&times;</button>
+      </div>
+      <dl class="help-list">
+        <div class="help-item">
+          <dt>Page</dt>
+          <dd>Paste or type your text here, then press Strike. Edit it and
+            strike again to re-run with the current settings.</dd>
+        </div>
+        <div class="help-item">
+          <dt>Every</dt>
+          <dd>Replace the first word, then every N-th word after it.</dd>
+        </div>
+        <div class="help-item">
+          <dt>Senses</dt>
+          <dd>How many candidate meanings of a word to consider before
+            ranking &mdash; applied to every checked source.</dd>
+        </div>
+        <div class="help-item">
+          <dt>Threshold</dt>
+          <dd>How far a candidate's sense is allowed to drift from the
+            word's dominant sense before it's rejected.</dd>
+        </div>
+        <div class="help-item">
+          <dt>Slide</dt>
+          <dd>If a word has no usable synonym, try the next word instead of
+            leaving that slot unfilled.</dd>
+        </div>
+        <div class="help-item">
+          <dt>Multi&#8209;word</dt>
+          <dd>Allow multi-word synonyms, like &ldquo;give up&rdquo; for
+            &ldquo;abandon&rdquo;.</dd>
+        </div>
+        <div class="help-item">
+          <dt>Sources</dt>
+          <dd>Which dictionaries to pull synonyms from. Check more than one
+            to pool their candidates together &mdash; see
+            <a href="/docs" target="_blank" rel="noopener">the API docs</a>
+            for what Senses/Threshold mean for each one.</dd>
+        </div>
+        <div class="help-item">
+          <dt>Ribbon</dt>
+          <dd><strong>Black</strong> shows the plain result.
+            <strong>Blk+Red</strong> marks each change inline, the original
+            struck through next to its replacement. <strong>Dupl.</strong>
+            shows the original and the result side by side, with a mark in
+            the gutter next to every changed line.</dd>
+        </div>
+        <div class="help-item">
+          <dt>Strike</dt>
+          <dd>Runs the rewrite with the current settings.</dd>
+        </div>
+        <div class="help-item">
+          <dt>Corrections cards</dt>
+          <dd>One per change. Hover or click a card to find its word in the
+            page; the chips swap in an alternative synonym; Reset puts the
+            original word back &mdash; every view updates immediately.</dd>
+        </div>
+        <div class="help-item">
+          <dt>Replaced words in the page</dt>
+          <dd>In Blk+Red or Dupl., click a red word to jump back to its
+            card.</dd>
+        </div>
+        <div class="help-item">
+          <dt>Copy / Download</dt>
+          <dd>Grab the current result text, including any Reset or
+            alternative edits you've made.</dd>
+        </div>
+      </dl>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

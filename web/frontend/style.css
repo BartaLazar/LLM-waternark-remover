@@ -32,13 +32,18 @@
   --ribbon: #b3372c;
   --ribbon-soft: rgba(179, 55, 44, 0.08);
   --focus-ring: rgba(179, 55, 44, 0.35);
-  /* Warm highlighter-yellow, deliberately outside the paper/carbon/ribbon
-     family so a clicked-to-find word can't be mistaken for a correction
-     mark (ribbon-red) or for plain ink. */
-  --highlight-bg: #eddb8f;
-  --highlight-pulse: #e4c862;
-  --highlight-text: #3a2c05;
   --error-bg: #f3e3e0;
+  /* For the corrections cards' hover/click "inverted" state -- a card's
+     normal face is paper-on-carbon-border, so inverting it means using this
+     *theme's* ink/paper pair as its background/text (handled by --carbon
+     and --paper directly, which already swap per theme) plus a second,
+     independently-tuned set of muted/ribbon/border tones for its children,
+     since --muted/--ribbon/--border are tuned to sit on --paper, not on
+     --carbon. Reusing the *other* theme's values for those three does
+     exactly that, in both directions. */
+  --inv-muted: #a89f8a;
+  --inv-ribbon: #d9836f;
+  --inv-border: #453f2f;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -51,10 +56,10 @@
     --ribbon: #d9836f;
     --ribbon-soft: rgba(217, 131, 111, 0.12);
     --focus-ring: rgba(217, 131, 111, 0.4);
-    --highlight-bg: #5c4a15;
-    --highlight-pulse: #7a611c;
-    --highlight-text: #f5e8b8;
     --error-bg: #3a2420;
+    --inv-muted: #7a7365;
+    --inv-ribbon: #b3372c;
+    --inv-border: #c9c2ac;
   }
 }
 
@@ -107,6 +112,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   padding-bottom: 1rem;
 }
 .brand { min-width: 0; }
+.masthead-actions { display: flex; gap: 0.6rem; flex: none; }
+.help-btn { padding-left: 0.9rem; padding-right: 0.9rem; font-weight: 700; }
 .wordmark {
   font-family: "Special Elite", "Courier Prime", monospace;
   font-weight: 400;
@@ -137,18 +144,21 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   font-weight: 700;
 }
 
+/* The one solid, filled control in an otherwise all-outline UI -- everything
+   else here is a key you press; this is the lever, so it reads as the
+   machine's main action at a glance rather than one more strip segment. */
 .stamp-btn {
   font-weight: 700;
-  font-size: 0.82rem;
+  font-size: 1rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  border: 1.5px solid var(--ribbon);
-  color: var(--ribbon);
-  background: transparent;
-  padding: 0.55rem 1.15rem;
-  transition: background 0.12s ease, color 0.12s ease, transform 0.08s ease;
+  letter-spacing: 0.08em;
+  border: none;
+  color: var(--paper);
+  background: var(--ribbon);
+  padding: 0 1.8rem;
+  transition: background 0.12s ease, transform 0.08s ease;
 }
-.stamp-btn:hover:not(:disabled) { background: var(--ribbon); color: #fff; }
+.stamp-btn:hover:not(:disabled) { background: var(--carbon); }
 .stamp-btn:active:not(:disabled) { transform: translateY(1px); }
 .stamp-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
@@ -327,7 +337,6 @@ input[type="range"]::-moz-range-thumb {
 .page-frame {
   background: var(--paper);
   border: 1.5px solid var(--carbon);
-  border-top: none;
   padding: 1.5rem 1.6rem 1.7rem;
 }
 .page-input-head {
@@ -362,24 +371,33 @@ input[type="range"]::-moz-range-thumb {
 
 .result-view { font-size: 0.9rem; line-height: 1.9; }
 
+/* Click-to-find highlight: a real box of inverted color (ink background,
+   paper text), not a tint -- see jumpToWord() in app.js, which adds/removes
+   this class and clears it again after 5s. The transition covers both the
+   fade in and the fade out since both are just this class toggling. */
 .result-word {
   scroll-margin: 2.5rem;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: background 0.2s ease, color 0.2s ease, padding 0.2s ease, margin 0.2s ease;
 }
 .result-word.highlight {
-  background: var(--highlight-bg);
-  color: var(--highlight-text);
-  animation: highlight-pulse 0.5s ease;
-}
-@keyframes highlight-pulse {
-  0% { background: var(--highlight-pulse); }
-  100% { background: var(--highlight-bg); }
+  background: var(--carbon);
+  color: var(--paper);
+  padding: 0 0.15em;
+  margin: 0 -0.15em;
 }
 @media (prefers-reduced-motion: reduce) {
-  .result-word.highlight { animation: none; }
+  .result-word { transition: none; }
 }
 
-.corr { color: var(--ribbon); font-weight: 700; }
+.corr {
+  color: var(--ribbon);
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline dotted transparent;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 0.12s ease;
+}
+.corr:hover { text-decoration-color: var(--ribbon); }
 .struck { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--muted); }
 
 .result-galleys {
@@ -419,12 +437,28 @@ input[type="range"]::-moz-range-thumb {
   flex: 1 1 210px;
   border: 1.5px solid var(--carbon);
   background: var(--paper);
+  color: var(--carbon);
   padding: 0.7rem 0.9rem;
   font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 .idx-card.is-reset { border-color: var(--border); }
+
+/* Hover previews the same inverted look that a click leaves in place for
+   5s (.highlight, toggled from app.js) -- one visual language for "this
+   card is active", whether that's a pointer resting on it or a recent
+   click-to-find. */
+.idx-card:hover, .idx-card.highlight {
+  background: var(--carbon);
+  color: var(--paper);
+  border-color: var(--carbon);
+}
+
 .idx-card .words { font-weight: 700; margin-bottom: 0.4rem; display: flex; align-items: baseline; gap: 0.35rem; flex-wrap: wrap; }
-.idx-card .word-original { color: var(--muted); font-weight: 400; }
+.idx-card .word-original { color: var(--muted); font-weight: 400; transition: color 0.15s ease; }
+.idx-card:hover .word-original, .idx-card.highlight .word-original { color: var(--inv-muted); }
+
 .idx-card .word-link {
   background: none;
   border: none;
@@ -436,10 +470,15 @@ input[type="range"]::-moz-range-thumb {
   text-decoration: underline dotted;
   text-decoration-color: var(--border);
   text-underline-offset: 3px;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
 }
-.idx-card .word-link:hover { color: var(--ribbon); text-decoration-style: solid; text-decoration-color: var(--ribbon); }
+.idx-card:hover .word-link, .idx-card.highlight .word-link { color: var(--paper); text-decoration-color: var(--inv-border); }
+.idx-card .word-link:hover { color: var(--ribbon) !important; text-decoration-style: solid; text-decoration-color: var(--ribbon) !important; }
+.idx-card:hover .word-link:hover { color: var(--inv-ribbon) !important; text-decoration-color: var(--inv-ribbon) !important; }
 .idx-card.is-reset .word-link { font-style: italic; font-weight: 400; color: var(--muted); }
-.idx-card .sim { color: var(--muted); font-size: 0.74rem; margin-left: auto; }
+.idx-card.is-reset:hover .word-link, .idx-card.is-reset.highlight .word-link { color: var(--inv-muted); }
+.idx-card .sim { color: var(--muted); font-size: 0.74rem; margin-left: auto; transition: color 0.15s ease; }
+.idx-card:hover .sim, .idx-card.highlight .sim { color: var(--inv-muted); }
 
 .idx-card .alts { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.5rem; }
 .alt-chip {
@@ -449,9 +488,13 @@ input[type="range"]::-moz-range-thumb {
   padding: 0.2rem 0.5rem;
   font-size: 0.72rem;
   font-family: inherit;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
 .alt-chip:hover { border-color: var(--ribbon); color: var(--ribbon); }
 .alt-chip.active { border-color: var(--ribbon); background: var(--ribbon); color: #fff; }
+.idx-card:hover .alt-chip, .idx-card.highlight .alt-chip { border-color: var(--inv-border); color: var(--inv-muted); }
+.idx-card:hover .alt-chip:hover, .idx-card.highlight .alt-chip:hover { border-color: var(--inv-ribbon); color: var(--inv-ribbon); }
+.idx-card:hover .alt-chip.active, .idx-card.highlight .alt-chip.active { border-color: var(--inv-ribbon); background: var(--inv-ribbon); color: var(--carbon); }
 
 .reset-link {
   background: none;
@@ -464,8 +507,11 @@ input[type="range"]::-moz-range-thumb {
   text-decoration-color: var(--border);
   text-underline-offset: 2px;
   cursor: pointer;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
 }
-.reset-link:hover { color: var(--ribbon); text-decoration-color: var(--ribbon); }
+.reset-link:hover { color: var(--ribbon) !important; text-decoration-color: var(--ribbon) !important; }
+.idx-card:hover .reset-link, .idx-card.highlight .reset-link { color: var(--inv-muted); text-decoration-color: var(--inv-border); }
+.idx-card:hover .reset-link:hover, .idx-card.highlight .reset-link:hover { color: var(--inv-ribbon) !important; text-decoration-color: var(--inv-ribbon) !important; }
 
 /* ============================= error ============================= */
 
@@ -477,6 +523,68 @@ input[type="range"]::-moz-range-thumb {
   padding: 0.85rem 1rem;
 }
 .error p { margin: 0; font-size: 0.85rem; }
+
+/* ============================= help ============================= */
+
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 18, 14, 0.6);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 4rem 1.25rem;
+  overflow-y: auto;
+  z-index: 100;
+}
+.help-panel {
+  background: var(--paper);
+  color: var(--carbon);
+  border: 1.5px solid var(--carbon);
+  max-width: 640px;
+  width: 100%;
+  padding: 1.6rem 1.8rem 1.8rem;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.2);
+}
+.help-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  border-bottom: 1.5px solid var(--carbon);
+  padding-bottom: 0.8rem;
+  margin-bottom: 1rem;
+}
+.help-head h2 {
+  font-family: "Special Elite", "Courier Prime", monospace;
+  font-weight: 400;
+  font-size: 1.2rem;
+  margin: 0;
+}
+.help-close {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0.1rem 0.3rem;
+  transition: color 0.12s ease;
+}
+.help-close:hover { color: var(--ribbon); }
+
+.help-list { margin: 0; }
+.help-item { padding: 0.7rem 0; border-bottom: 1px dashed var(--border); }
+.help-item:last-child { border-bottom: none; }
+.help-item dt {
+  font-weight: 700;
+  color: var(--ribbon);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.3rem;
+}
+.help-item dd { margin: 0; font-size: 0.85rem; line-height: 1.65; color: var(--carbon); }
 
 /* ============================= footer ============================= */
 
