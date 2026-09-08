@@ -133,10 +133,10 @@ byte-identical output to the CLI.
 | `text` | string | yes | — | non-empty after trimming whitespace | The text to rewrite. |
 | `every` | integer | no | `5` | `>= 1` | Replace the first word, then every N-th word after it (word 1, `1+N`, `1+2N`, ...). |
 | `slide` | boolean | no | `false` | — | If a targeted word has no usable synonym, try the next word instead of leaving that slot unfilled. Keeps the substitution rate close to 1-in-N; without it, substitutions land only on the fixed grid (word 1, `1+N`, `1+2N`, ...) and misses are common. |
-| `senses` | integer | no | `3` | `>= 1` | Consider the K closest WordNet senses of a word, not just its single most common one. `1` never looks past the dominant sense. |
-| `threshold` | number | no | `0.95` | `0.0`–`1.0` | Minimum Wu-Palmer similarity a non-dominant sense must have to the word's dominant sense to be used as a candidate; `0` disables the check. **Only has any effect when `senses > 1`**, which is the default — at `senses=1` a word's only sense is trivially 100% similar to itself, so every candidate already clears any threshold. |
+| `senses` | integer | no | `3` | `>= 1` | Consider the K closest senses of a word, not just its single most common one. Applies to every enabled source, reinterpreted per source — see [Synonym sources](#synonym-sources) below. `1` never looks past the dominant sense. |
+| `threshold` | number | no | `0.95` | `0.0`–`1.0` | Minimum similarity a non-dominant sense must have to the word's dominant sense to be used as a candidate; `0` disables the check. Applies to every enabled source (see [Synonym sources](#synonym-sources)). **Only has any effect when `senses > 1`**, which is the default — a word's dominant sense is trivially 100% similar to itself, so every candidate already clears any threshold at `senses=1`. |
 | `allow_multiword` | boolean | no | `false` | — | Allow multi-word synonyms such as `"give up"`. |
-| `sources` | array of string | no | `["wordnet"]` | non-empty; each name must be one from [`/info`](#get-apiv1info)'s `available_sources` | One or more synonym sources to use. Naming more than one pools their candidates together rather than picking one. `senses`/`threshold` only affect the `wordnet` source. See [Synonym sources](#synonym-sources) below. |
+| `sources` | array of string | no | `["wordnet"]` | non-empty; each name must be one from [`/info`](#get-apiv1info)'s `available_sources` | One or more synonym sources to use. Naming more than one pools their candidates together rather than picking one. |
 
 Example (omitted fields use their defaults, shown in [`/info`](#get-apiv1info) above):
 
