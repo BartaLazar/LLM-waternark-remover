@@ -66,11 +66,20 @@ const els = {
 // mirrors the API's `tokens` field 1:1. See web/docs/API.md.
 let currentTokens = [];
 
-// position -> the word that was originally there, for every position the API
-// actually replaced. Fixed for the life of one rewrite response; only
-// currentTokens changes as the user resets/picks alternatives. Drives the
-// struck-through text in Black+Red and the "Original" galley in Duplicate.
+// position -> the word that was originally there, for every position that's
+// EVER different from its original -- both an actual substitution (from
+// data.replacements) and a word the server or a client-side edit silently
+// changed as a side effect of one (currently just "a"/"an" agreement, see
+// data.tokens[i].original). Used to reconstruct the true "Original" galley
+// in Duplicate, and, for `correctionPositions` below, which of those get the
+// struck-through/red "corr" treatment.
 let originalByPosition = new Map();
+
+// Positions with a real correction card -- a subset of originalByPosition's
+// keys. Only these get the struck-through/red "corr" span (and its click
+// handler) in Black+Red and the Duplicate "Set" galley: a silent side-effect
+// like an "a"/"an" fix has no card to jump to or highlight.
+let correctionPositions = new Set();
 
 // "black" | "blackred" | "duplicate"
 let currentMode = "black";
@@ -169,7 +178,7 @@ function renderCorrectionView(container) {
       continue;
     }
     const original = originalByPosition.get(token.position);
-    if (original !== undefined && original !== token.text) {
+    if (correctionPositions.has(token.position) && original !== token.text) {
       const s = document.createElement("s");
       s.className = "struck";
       s.textContent = original;
@@ -206,7 +215,7 @@ function renderPlainViewWithCorrections(container) {
       continue;
     }
     const original = originalByPosition.get(token.position);
-    const changed = original !== undefined && original !== token.text;
+    const changed = correctionPositions.has(token.position) && original !== token.text;
     container.appendChild(wordSpan(token.text, token.position, changed ? "corr" : null));
   }
 }
@@ -220,7 +229,7 @@ function computeGutterMarks() {
   for (const token of currentTokens) {
     if (!token.is_word) continue;
     const original = originalByPosition.get(token.position);
-    if (original === undefined || original === token.text) continue;
+    if (!correctionPositions.has(token.position) || original === token.text) continue;
     const span = els.galleySetText.querySelector('.result-word[data-position="' + token.position + '"]');
     if (!span) continue;
     const rect = span.getBoundingClientRect();
@@ -320,7 +329,17 @@ function renderResult(data) {
   els.pageResult.hidden = false;
   els.correctionsPanel.hidden = false;
   currentTokens = data.tokens.map((t) => ({ ...t }));
+  correctionPositions = new Set(data.replacements.map((r) => r.position));
   originalByPosition = new Map(data.replacements.map((r) => [r.position, r.original]));
+  // A word whose text the server changed only as a side effect (currently
+  // just an "a"/"an" fix -- see schemas.TextToken.original) isn't in
+  // `replacements`, so it needs its true original recorded here too, or the
+  // Duplicate view's "Original" galley would show the already-fixed text.
+  for (const token of data.tokens) {
+    if (token.is_word && token.original != null) {
+      originalByPosition.set(token.position, token.original);
+    }
+  }
   clearWordHighlight();
   clearCardHighlight();
   renderAllViews();
@@ -429,7 +448,16 @@ function applyChoice(card, item, word, similarity, activeChip, allChips) {
   // as easily change whether the word now starts with a vowel sound.
   const articleToken = wordTokenAtPosition(item.position - 1);
   if (articleToken && ["a", "an"].includes(articleToken.text.toLowerCase())) {
-    articleToken.text = fixArticle(articleToken.text, token ? token.text : word);
+    const fixed = fixArticle(articleToken.text, token ? token.text : word);
+    if (fixed !== articleToken.text) {
+      // Record its true original the first time it's ever touched (by the
+      // server or a client-side edit, whichever happens first) so the
+      // Duplicate view's "Original" galley stays correct even after this.
+      if (!originalByPosition.has(articleToken.position)) {
+        originalByPosition.set(articleToken.position, articleToken.text);
+      }
+      articleToken.text = fixed;
+    }
   }
   renderAllViews();
 

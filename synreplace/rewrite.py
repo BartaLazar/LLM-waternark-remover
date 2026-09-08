@@ -121,7 +121,10 @@ def rewrite_tokens(
         if ordinal >= 2:
             article_token = tokens[word_indices[ordinal - 2]]
             if article_token.text.lower() in ("a", "an"):
-                article_token.text = fix_article(article_token.text, tokens[token_index].text)
+                fixed = fix_article(article_token.text, tokens[token_index].text)
+                if fixed != article_token.text:
+                    article_token.original_text = article_token.text
+                    article_token.text = fixed
         # Measure the next interval from where we actually landed, so sliding
         # never bunches two substitutions closer than N words apart.
         next_target = ordinal + every

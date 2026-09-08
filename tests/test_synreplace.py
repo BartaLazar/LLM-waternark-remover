@@ -326,6 +326,19 @@ class TestRewrite(unittest.TestCase):
         _, replacements = rewrite("A single discovery matters here today.", every=1, slide=True, finder=finder)
         self.assertEqual([r.original for r in replacements], ["single"])
 
+    def test_article_fix_records_its_own_true_original_on_the_token(self):
+        # rewrite_tokens (not rewrite) so the fixed article's *own* prior text
+        # is recoverable -- a caller reconstructing "what did this say before"
+        # (the web UI's Duplicate view) needs it, since it isn't a Replacement.
+        finder = _WordMapFinder({"single": [("individual", 1.0)]})
+        tokens, _ = rewrite_tokens("A single discovery matters here today.", every=1, slide=True, finder=finder)
+        article_token = next(t for t in tokens if t.is_word and t.text == "An")
+        self.assertEqual(article_token.original_text, "A")
+        # An untouched word's original_text stays None -- only a token whose
+        # text a fix actually changed carries one.
+        untouched = next(t for t in tokens if t.is_word and t.text == "discovery")
+        self.assertIsNone(untouched.original_text)
+
     def test_only_targeted_positions_change(self):
         result, replacements = rewrite(SAMPLE, every=4)
         original_words = [t.text for t in tokenize(SAMPLE) if t.is_word]

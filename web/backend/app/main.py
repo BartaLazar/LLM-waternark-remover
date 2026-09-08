@@ -125,6 +125,7 @@ def rewrite_text(payload: schemas.RewriteRequest) -> schemas.RewriteResponse:
                 text=token.text,
                 is_word=token.is_word,
                 position=word_ordinal if token.is_word else None,
+                original=token.original_text,
             )
         )
 
