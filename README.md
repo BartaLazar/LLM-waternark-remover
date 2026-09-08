@@ -1,5 +1,8 @@
 # synreplace
 
+![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue)
+![No API key required](https://img.shields.io/badge/API%20key-not%20required-brightgreen)
+
 A small CLI that takes a text and gives it back with every N-th word swapped for
 its closest synonym. Synonyms come from **WordNet** via NLTK by default — fully
 offline, no API key, no network after the first run — with two free, tokenless
@@ -13,6 +16,41 @@ $ synreplace -n 3 --slide "The quick brown fox jumps over the lazy dog while the
 The speedy brown fox leaps over the lazy dog while the investigators carefully examined the surprising effects of their hard experiment.
 ```
 
+## Contents
+
+- [Features](#features)
+- [Install](#install)
+- [Usage](#usage)
+  - [Options](#options)
+- [How a synonym is picked](#how-a-synonym-is-picked)
+- [`--threshold`: how far a synonym is allowed to drift](#--threshold-how-far-a-synonym-is-allowed-to-drift)
+- [Synonym sources](#synonym-sources)
+- [What is deliberately left alone](#what-is-deliberately-left-alone)
+- [Quality note](#quality-note)
+- [Web interface](#web-interface)
+- [Project layout](#project-layout)
+- [Tests](#tests)
+
+## Features
+
+- **Offline by default.** WordNet via NLTK, downloaded once, no API key, no
+  network required afterward.
+- **Deterministic.** Same input, same flags, same output — every time, no
+  randomness anywhere in the pipeline.
+- **Format-preserving.** Whitespace, newlines, punctuation and numbers come
+  out byte-identical; only the targeted words change.
+- **Grammatically correct substitutions.** A replacement is re-conjugated,
+  re-pluralized and re-capitalized to match the original word's form —
+  `expressed` → `evinced`, `Researchers` → `Investigators` — and a candidate
+  that would need an irregular form nobody can spell reliably (`go` → `goed`)
+  is skipped rather than guessed at wrong.
+- **Two free online sources, opt-in.** Datamuse and the Free Dictionary API,
+  neither needing a key or signup, usable alone or pooled together with
+  WordNet — see [Synonym sources](#synonym-sources).
+- **Four ways in: CLI, Python library, REST API, browser UI** — all four run
+  the same engine underneath, so the same input and flags give the same
+  output everywhere.
+
 ## Install
 
 ```bash
@@ -20,6 +58,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 ```
+
+Requires Python 3.8+.
 
 The WordNet data (~10 MB) downloads itself on the first run, along with the
 CMU Pronouncing Dictionary (used for accurate consonant-doubling like "occur"
@@ -204,15 +244,45 @@ most common sense, which is right most of the time and occasionally not
 under [Synonym sources](#synonym-sources) above. Read the output before using
 it; `-v` shows you exactly what changed.
 
-## Tests
-
-```bash
-python -m unittest discover -s tests -v
-```
-
 ## Web interface
 
 A browser UI and REST API also exist, in [`web/`](web/) — a separate,
 self-contained folder with its own setup and its own server, independent of
 this CLI. See [`web/README.md`](web/README.md) to run it, and
 [`web/docs/API.md`](web/docs/API.md) for the REST API reference.
+
+![synreplace web interface, showing the controls, a rewritten result, and the substitutions table](docs/web-ui.png)
+
+A few things it adds on top of the CLI:
+
+- **Pick and pool sources visually** — check any combination of WordNet,
+  Datamuse and the Free Dictionary API; results are merged live.
+- **Reset or swap any substitution.** Every row in the substitutions table has
+  a Reset button back to the original word, plus up to 3 alternative-synonym
+  chips to swap in instead — the result text updates immediately, no re-run
+  needed.
+- **Click a changed word to find it.** Clicking a word in the table highlights
+  and scrolls to its exact spot in the result text.
+- **Live parameter descriptions** under every control, and a loading indicator
+  while a request is in flight (the online sources can take a few seconds).
+
+## Project layout
+
+```
+synreplace/    The CLI + library: WordNet lookup, the two online sources,
+               inflection, tokenizer, and the rewrite engine every entry
+               point (CLI/library/API/UI) shares.
+tests/         Tracked test suite (see Tests below).
+web/           The browser UI + REST API — a separate app that reuses the
+               synreplace engine; see web/README.md.
+  backend/     FastAPI app (routes, request/response schemas).
+  frontend/    Plain HTML/CSS/JS, no build step.
+  docs/API.md  REST API reference.
+docs/          Assets for this README (e.g. the screenshot above).
+```
+
+## Tests
+
+```bash
+python -m unittest discover -s tests -v
+```
