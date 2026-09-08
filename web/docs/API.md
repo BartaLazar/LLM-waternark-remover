@@ -22,6 +22,7 @@ so they can't drift out of sync with the actual API the way hand-written docs ca
   - [`GET /api/v1/health`](#get-apiv1health)
   - [`GET /api/v1/info`](#get-apiv1info)
   - [`POST /api/v1/rewrite`](#post-apiv1rewrite)
+- [Synonym sources](#synonym-sources)
 - [Error format](#error-format)
 - [Versioning](#versioning)
 
@@ -86,8 +87,26 @@ hardcoding defaults that could drift from the server's.
     "slide": false,
     "senses": 3,
     "threshold": 0.95,
-    "allow_multiword": false
-  }
+    "allow_multiword": false,
+    "sources": ["wordnet"]
+  },
+  "available_sources": [
+    {
+      "name": "wordnet",
+      "description": "Standard dictionary (WordNet, offline, no network needed)",
+      "online": false
+    },
+    {
+      "name": "datamuse",
+      "description": "Datamuse API (online, no key needed)",
+      "online": true
+    },
+    {
+      "name": "dictionaryapi",
+      "description": "Free Dictionary API (online, no key needed)",
+      "online": true
+    }
+  ]
 }
 ```
 
@@ -96,6 +115,7 @@ hardcoding defaults that could drift from the server's.
 | `synreplace_version` | string | Version of the underlying `synreplace` package (`synreplace.__version__`). |
 | `api_version` | string | This API's version segment, e.g. `"v1"` — matches the URL prefix. |
 | `defaults` | object | The default value `/rewrite` uses for each optional field. Shape matches the `RewriteRequest` fields below (minus `text`). |
+| `available_sources` | array of `SourceInfo` | Every valid value for `RewriteRequest.sources`, with a human-readable description and whether it needs a network connection. |
 
 ---
 
@@ -113,9 +133,10 @@ byte-identical output to the CLI.
 | `text` | string | yes | — | non-empty after trimming whitespace | The text to rewrite. |
 | `every` | integer | no | `5` | `>= 1` | Replace the first word, then every N-th word after it (word 1, `1+N`, `1+2N`, ...). |
 | `slide` | boolean | no | `false` | — | If a targeted word has no usable synonym, try the next word instead of leaving that slot unfilled. Keeps the substitution rate close to 1-in-N; without it, substitutions land only on the fixed grid (word 1, `1+N`, `1+2N`, ...) and misses are common. |
-| `senses` | integer | no | `3` | `>= 1` | Consider the K closest WordNet senses of a word, not just its single most common one. `1` never looks past the dominant sense. |
-| `threshold` | number | no | `0.95` | `0.0`–`1.0` | Minimum Wu-Palmer similarity a non-dominant sense must have to the word's dominant sense to be used as a candidate; `0` disables the check. **Only has any effect when `senses > 1`**, which is the default — at `senses=1` a word's only sense is trivially 100% similar to itself, so every candidate already clears any threshold. |
+| `senses` | integer | no | `3` | `>= 1` | Consider the K closest senses of a word, not just its single most common one. Applies to every enabled source, reinterpreted per source — see [Synonym sources](#synonym-sources) below. `1` never looks past the dominant sense. |
+| `threshold` | number | no | `0.95` | `0.0`–`1.0` | Minimum similarity a non-dominant sense must have to the word's dominant sense to be used as a candidate; `0` disables the check. Applies to every enabled source (see [Synonym sources](#synonym-sources)). **Only has any effect when `senses > 1`**, which is the default — a word's dominant sense is trivially 100% similar to itself, so every candidate already clears any threshold at `senses=1`. |
 | `allow_multiword` | boolean | no | `false` | — | Allow multi-word synonyms such as `"give up"`. |
+| `sources` | array of string | no | `["wordnet"]` | non-empty; each name must be one from [`/info`](#get-apiv1info)'s `available_sources` | One or more synonym sources to use. Naming more than one pools their candidates together rather than picking one. |
 
 Example (omitted fields use their defaults, shown in [`/info`](#get-apiv1info) above):
 
@@ -219,7 +240,7 @@ else default), captured from the running server:
 
 | Status | When | Example body |
 | --- | --- | --- |
-| `422` | `text` is missing, empty, or whitespace-only; or any field fails its type/range constraint (e.g. `threshold: 1.5`, `every: 0`). | See [Error format](#error-format) below. |
+| `422` | `text` is missing, empty, or whitespace-only; `sources` is empty or names an unknown source; or any field fails its type/range constraint (e.g. `threshold: 1.5`, `every: 0`). | See [Error format](#error-format) below. |
 | `500` | Unexpected server-side failure. Shouldn't happen in normal operation; check server logs if it does. | `{"detail": "Internal Server Error"}` |
 
 **curl example**
@@ -230,11 +251,56 @@ curl -s -X POST http://127.0.0.1:8000/api/v1/rewrite \
   -d '{
     "text": "The researchers carefully examined the surprising results.",
     "every": 3,
-    "slide": true
+    "slide": true,
+    "sources": ["wordnet", "datamuse"]
   }'
 ```
 
 ---
+
+## Synonym sources
+
+`sources` selects one or more synonym sources by name (see `/info`'s
+`available_sources` for the live list). Naming more than one pools every
+enabled source's candidates into one ranked list, rather than picking exactly
+one to use.
+
+| Name | What it is | Network? |
+| --- | --- | --- |
+| `wordnet` | Offline WordNet lookup (the default) | No |
+| `datamuse` | [Datamuse](https://www.datamuse.com/api/), built specifically for word-relation queries; returns a relevance score per candidate | Yes |
+| `dictionaryapi` | [Free Dictionary API](https://dictionaryapi.dev/), a definitions API with synonyms as a secondary field; coverage varies a lot by word | Yes |
+
+**`senses`/`threshold` apply to every enabled source**, each reinterpreting
+them for its own shape of data:
+
+- **`wordnet`**: real, measured semantic distance (Wu-Palmer score).
+- **`datamuse`**: `senses` caps how far down Datamuse's own relevance-ranked
+  list is searched (its top hit stands in for "the dominant sense");
+  `threshold` drops any candidate whose score, normalized against that top
+  hit, falls below it. Datamuse doesn't disambiguate word senses at all, so
+  it can still occasionally surface a synonym for the wrong meaning of a word
+  if a wrong-meaning result happens to score close to the top one.
+- **`dictionaryapi`**: this API's response is naturally grouped into one
+  entry per meaning of the word, in the order it lists them (its own implicit
+  "most common first"). `senses` caps how many meaning-entries are searched;
+  every candidate from the first one scores `1.0`, every candidate from a
+  later one scores a flat `0.5` — not a measured relatedness value like
+  WordNet's, since this API doesn't expose anything to compute one from.
+
+Other trade-offs worth knowing:
+
+- **Latency.** Each distinct word costs one HTTP request per online source
+  (cached per source instance for the process's lifetime, so a repeated word
+  is free the second time). A slow or unreachable API adds real time to a
+  request rather than erroring it out — a source that fails just contributes
+  no candidates for that request, and prints a one-time note to the server's
+  stderr the first time that happens.
+- **`similarity` isn't on the same scale across sources.** WordNet's is a
+  graph-distance score, Datamuse's is a normalized relevance score, and
+  `dictionaryapi`'s is one of two fixed values. All three are reported as a
+  `0.0`–`1.0` float for a consistent shape, but the numbers aren't measuring
+  the same thing.
 
 ## Error format
 

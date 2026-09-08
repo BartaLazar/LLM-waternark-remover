@@ -9,6 +9,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from synreplace.sources import SOURCE_NAMES
+
 
 class RewriteRequest(BaseModel):
     text: str = Field(
@@ -29,19 +31,33 @@ class RewriteRequest(BaseModel):
     )
     senses: int = Field(
         3, ge=1,
-        description="Consider the K closest WordNet senses of a word, not "
-                     "just its single most common one.",
+        description="Consider the K closest senses of a word, not just its "
+                     "single most common one. Applies to every enabled "
+                     "source, reinterpreted per source -- see "
+                     "docs/API.md#synonym-sources.",
     )
     threshold: float = Field(
         0.95, ge=0.0, le=1.0,
         description="Minimum similarity (0-1) a non-dominant sense must "
                      "have to the word's dominant sense to be used; 0 "
-                     "disables the check. Only matters when senses > 1, "
-                     "which is the default.",
+                     "disables the check. Applies to every enabled source; "
+                     "only matters when senses > 1, which is the default.",
     )
     allow_multiword: bool = Field(
         False,
         description="Allow multi-word synonyms such as 'give up'.",
+    )
+    sources: List[str] = Field(
+        default_factory=lambda: ["wordnet"],
+        description="One or more synonym sources to use, by name (see "
+                     "/info for the full list with descriptions). Naming "
+                     "more than one pools their candidates together rather "
+                     "than picking one. senses/threshold apply to every "
+                     "source, reinterpreted per source since only 'wordnet' "
+                     "has a native notion of word senses -- see "
+                     "docs/API.md#synonym-sources for what they mean "
+                     "for each one.",
+        examples=[["wordnet"], ["wordnet", "datamuse"]],
     )
 
     @field_validator("text")
@@ -49,6 +65,19 @@ class RewriteRequest(BaseModel):
     def text_must_not_be_blank(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("text must contain at least one non-whitespace character")
+        return value
+
+    @field_validator("sources")
+    @classmethod
+    def sources_must_be_known_and_nonempty(cls, value: List[str]) -> List[str]:
+        if not value:
+            raise ValueError("at least one source is required")
+        unknown = [name for name in value if name not in SOURCE_NAMES]
+        if unknown:
+            raise ValueError(
+                "unknown source(s): %s (choose from %s)"
+                % (", ".join(unknown), ", ".join(SOURCE_NAMES))
+            )
         return value
 
 
@@ -109,9 +138,19 @@ class Defaults(BaseModel):
     senses: int
     threshold: float
     allow_multiword: bool
+    sources: List[str]
+
+
+class SourceInfo(BaseModel):
+    name: str = Field(description="The name to pass in RewriteRequest.sources.")
+    description: str = Field(description="Human-readable summary of this source.")
+    online: bool = Field(description="True if this source needs a network connection.")
 
 
 class InfoResponse(BaseModel):
     synreplace_version: str
     api_version: str
     defaults: Defaults
+    available_sources: List[SourceInfo] = Field(
+        description="Every valid value for RewriteRequest.sources."
+    )

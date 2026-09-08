@@ -20,7 +20,7 @@
       </span>
       <div>
         <h1>synreplace</h1>
-        <p class="subtitle">Replace every N-th word with its closest WordNet synonym.</p>
+        <p class="subtitle">Replace every N-th word with its closest synonym.</p>
       </div>
     </div>
   </header>
@@ -45,14 +45,17 @@
         <div class="field">
           <label for="every">Every N-th word</label>
           <input type="number" id="every" min="1" value="5" />
+          <p class="field-hint">Replace word 1, then every Nth word after it.</p>
         </div>
         <div class="field">
           <label for="senses">Senses (K)</label>
           <input type="number" id="senses" min="1" value="3" />
+          <p class="field-hint">How many candidate meanings to search before ranking.</p>
         </div>
         <div class="field field-wide">
           <label for="threshold">Threshold <span id="threshold-value" class="value-badge">0.95</span></label>
           <input type="range" id="threshold" min="0" max="1" step="0.01" value="0.95" />
+          <p class="field-hint">Minimum similarity a non-dominant sense must clear, per source.</p>
         </div>
         <div class="field switch-field">
           <label class="switch">
@@ -60,6 +63,7 @@
             <span class="switch-track" aria-hidden="true"></span>
             <span class="switch-label">Slide</span>
           </label>
+          <p class="field-hint">Try the next word if this one has no synonym.</p>
         </div>
         <div class="field switch-field">
           <label class="switch">
@@ -67,6 +71,33 @@
             <span class="switch-track" aria-hidden="true"></span>
             <span class="switch-label">Allow multi-word</span>
           </label>
+          <p class="field-hint">Allow synonyms like "give up".</p>
+        </div>
+        <div class="field field-full">
+          <label id="sources-label">Sources</label>
+          <div class="source-picker" role="group" aria-labelledby="sources-label">
+            <label class="source-option">
+              <input type="checkbox" class="source-checkbox" value="wordnet" checked />
+              <span class="source-name">WordNet</span>
+              <span class="source-tag">offline</span>
+            </label>
+            <label class="source-option">
+              <input type="checkbox" class="source-checkbox" value="datamuse" />
+              <span class="source-name">Datamuse</span>
+              <span class="source-tag source-tag-online">online</span>
+            </label>
+            <label class="source-option">
+              <input type="checkbox" class="source-checkbox" value="dictionaryapi" />
+              <span class="source-name">Free Dictionary API</span>
+              <span class="source-tag source-tag-online">online</span>
+            </label>
+          </div>
+          <p class="field-hint">
+            Pick one or more &mdash; results from every checked source are pooled
+            together. Senses/Threshold above apply to every source, though
+            what they mean varies by source &mdash; see
+            <a href="/docs" target="_blank" rel="noopener">the API docs</a> for details.
+          </p>
         </div>
       </div>
 
@@ -83,6 +114,9 @@
           <span>Rewrite</span>
         </button>
         <span id="status" role="status" aria-live="polite"></span>
+      </div>
+      <div class="loading-bar" id="loading-bar" hidden>
+        <div class="loading-bar-fill"></div>
       </div>
     </section>
 

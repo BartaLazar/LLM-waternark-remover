@@ -12,10 +12,16 @@ one `.venv`, one `requirements.txt`, for the whole project.
   CLI uses (`synreplace.rewrite()`) behind a REST API, and serves the static
   frontend alongside it.
 - **Frontend**: plain HTML/CSS/JS, in `frontend/` — no build step, no
-  framework, no external assets (works offline once the API is running). Each
-  row in the substitutions table lets you reset a word back to its original,
-  or swap in one of up to 3 alternative synonyms, with the result text
-  updating live.
+  framework, no external assets (works offline once the API is running, as
+  long as you stick to the WordNet source — see below). Each row in the
+  substitutions table lets you reset a word back to its original, or swap in
+  one of up to 3 alternative synonyms, with the result text updating live.
+- **Synonym sources**: WordNet (offline, default), or two free online
+  dictionary APIs that need no key/signup — Datamuse and the Free Dictionary
+  API. Pick one or more in the UI's "Sources" checkboxes; more than one pools
+  their candidates together. See [`docs/API.md`](docs/API.md#synonym-sources)
+  for the trade-offs (network latency, no sense-disambiguation on the online
+  sources).
 - **API reference**: see [`docs/API.md`](docs/API.md) for the full endpoint
   documentation, or run the server and open `/docs` for the live,
   auto-generated (Swagger) version of the same thing.

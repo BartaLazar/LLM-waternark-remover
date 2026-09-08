@@ -1,8 +1,13 @@
 # synreplace
 
+![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue)
+![No API key required](https://img.shields.io/badge/API%20key-not%20required-brightgreen)
+
 A small CLI that takes a text and gives it back with every N-th word swapped for
-its closest synonym. Synonyms come from **WordNet** via NLTK — everything runs
-offline, no API key, no network after the first run.
+its closest synonym. Synonyms come from **WordNet** via NLTK by default — fully
+offline, no API key, no network after the first run — with two free, tokenless
+online dictionary APIs available as opt-in alternatives (or additions) via
+`--sources`; see [below](#synonym-sources).
 
 > Sidenote: also useful to break LLMs' watermarking. But who would want to do such silly thing...
 
@@ -11,6 +16,41 @@ $ synreplace -n 3 --slide "The quick brown fox jumps over the lazy dog while the
 The speedy brown fox leaps over the lazy dog while the investigators carefully examined the surprising effects of their hard experiment.
 ```
 
+## Contents
+
+- [Features](#features)
+- [Install](#install)
+- [Usage](#usage)
+  - [Options](#options)
+- [How a synonym is picked](#how-a-synonym-is-picked)
+- [`--threshold`: how far a synonym is allowed to drift](#--threshold-how-far-a-synonym-is-allowed-to-drift)
+- [Synonym sources](#synonym-sources)
+- [What is deliberately left alone](#what-is-deliberately-left-alone)
+- [Quality note](#quality-note)
+- [Web interface](#web-interface)
+- [Project layout](#project-layout)
+- [Tests](#tests)
+
+## Features
+
+- **Offline by default.** WordNet via NLTK, downloaded once, no API key, no
+  network required afterward.
+- **Deterministic.** Same input, same flags, same output — every time, no
+  randomness anywhere in the pipeline.
+- **Format-preserving.** Whitespace, newlines, punctuation and numbers come
+  out byte-identical; only the targeted words change.
+- **Grammatically correct substitutions.** A replacement is re-conjugated,
+  re-pluralized and re-capitalized to match the original word's form —
+  `expressed` → `evinced`, `Researchers` → `Investigators` — and a candidate
+  that would need an irregular form nobody can spell reliably (`go` → `goed`)
+  is skipped rather than guessed at wrong.
+- **Two free online sources, opt-in.** Datamuse and the Free Dictionary API,
+  neither needing a key or signup, usable alone or pooled together with
+  WordNet — see [Synonym sources](#synonym-sources).
+- **Four ways in: CLI, Python library, REST API, browser UI** — all four run
+  the same engine underneath, so the same input and flags give the same
+  output everywhere.
+
 ## Install
 
 ```bash
@@ -18,6 +58,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 ```
+
+Requires Python 3.8+.
 
 The WordNet data (~10 MB) downloads itself on the first run, along with the
 CMU Pronouncing Dictionary (used for accurate consonant-doubling like "occur"
@@ -33,8 +75,8 @@ pip install -r requirements.txt
 ## Usage
 
 ```
-synreplace [-n N] [--slide] [--senses K] [--threshold T] [--multiword] [-v]
-           [-c | -i FILE | -o FILE | TEXT]
+synreplace [-n N] [--slide] [--senses K] [--threshold T] [--multiword]
+           [--sources NAME[,NAME...]] [-v] [-c | -i FILE | -o FILE | TEXT]
 ```
 
 Input is taken from the first of these that applies:
@@ -56,6 +98,7 @@ Input is taken from the first of these that applies:
 | `--senses K` | Consider the K closest senses of the word, not just the closest (default `3`) |
 | `--threshold T` | Minimum sense similarity (`0`-`1`) a `--senses` candidate must clear (default `0.95`); `0` disables the check — see below |
 | `--multiword` | Allow multi-word synonyms such as "give up" |
+| `--sources NAME[,NAME...]` | Synonym source(s) to use, comma-separated (default `wordnet`) — see [below](#synonym-sources) |
 | `-v, --verbose` | List every substitution on stderr, with its sense similarity |
 | `-c, --clip` | Read from and write back to the clipboard |
 | `-i, --input` / `-o, --output` | Read from / write to a file. With `-i` alone, output goes to `<name>-modified.<ext>` next to the input file |
@@ -127,6 +170,56 @@ default (`--senses 3`), so `--threshold` is already doing real filtering work
 out of the box. Pass `--senses 1` to turn that off entirely and use only each
 word's single most common sense.
 
+## Synonym sources
+
+By default `synreplace` looks synonyms up in WordNet, fully offline. Two free
+online dictionary APIs are available too — neither needs an API key or
+signup — and `--sources` accepts more than one at once, pooling every enabled
+source's candidates into one ranked list rather than picking exactly one:
+
+| Name | What it is | Network? |
+| --- | --- | --- |
+| `wordnet` | The default described above | No |
+| `datamuse` | [Datamuse](https://www.datamuse.com/api/), built specifically for word-relation queries; returns a relevance score per candidate | Yes |
+| `dictionaryapi` | [Free Dictionary API](https://dictionaryapi.dev/), a definitions API with synonyms as a secondary field; coverage varies a lot by word | Yes |
+
+```bash
+synreplace --sources wordnet,datamuse -v "the quick brown fox jumps over the lazy dog"
+```
+
+**`--senses`/`--threshold` apply to every enabled source**, each reinterpreting
+them for its own shape of data rather than ignoring them:
+
+- **`wordnet`**: as described above — real, measured semantic distance.
+- **`datamuse`**: `--senses` caps how far down Datamuse's own relevance-ranked
+  list is searched (its top hit is the "dominant sense" stand-in);
+  `--threshold` drops any candidate whose score, normalized against that top
+  hit, falls below it. Datamuse doesn't disambiguate word senses at all, so
+  even at the default this is a coarser signal than WordNet's — it can still
+  occasionally surface a synonym for the wrong meaning of a word (e.g. "fox"
+  the animal vs. "to fox someone" meaning to trick them) if a wrong-meaning
+  result happens to score close to the top one.
+- **`dictionaryapi`**: this API's response is naturally grouped into one
+  entry per meaning of the word, in the order it lists them (its own implicit
+  "most common first"). `--senses` caps how many of those meaning-entries are
+  searched; every candidate from the first one scores 100%, and every
+  candidate from a later one scores a flat 50% — not a measured relatedness
+  value like WordNet's, since this API doesn't expose anything to actually
+  compute one from.
+
+Other trade-offs worth knowing before reaching for the online sources:
+
+- **Speed and reliability.** Each distinct word costs one HTTP request (cached
+  per run, so a repeated word is free the second time); a slow or unreachable
+  API can add many seconds to a rewrite. A source that fails just contributes
+  no candidates rather than erroring out the whole run — a one-time note is
+  printed to stderr the first time that happens.
+- **Similarity numbers aren't on the same scale across sources.** WordNet's is
+  a graph-distance score, Datamuse's is a normalized relevance score, and
+  `dictionaryapi`'s is a fixed 100% for every candidate (no ranking data is
+  available). All three are shown as 0–100% for consistency, but a Datamuse
+  60% and a WordNet 60% don't mean quite the same thing.
+
 ## What is deliberately left alone
 
 The tool prefers leaving a word alone over producing a wrong one:
@@ -145,15 +238,11 @@ expect. See `--slide` above for the fix.
 
 ## Quality note
 
-WordNet has no idea what your sentence is about. It picks the most common sense,
-which is right most of the time and occasionally not (`problem` → `job`). Read
-the output before using it; `-v` shows you exactly what changed.
-
-## Tests
-
-```bash
-python -m unittest discover -s tests -v
-```
+None of these sources understand your sentence's context. WordNet picks the
+most common sense, which is right most of the time and occasionally not
+(`problem` → `job`); the online sources have their own failure modes, noted
+under [Synonym sources](#synonym-sources) above. Read the output before using
+it; `-v` shows you exactly what changed.
 
 ## Web interface
 
@@ -161,3 +250,39 @@ A browser UI and REST API also exist, in [`web/`](web/) — a separate,
 self-contained folder with its own setup and its own server, independent of
 this CLI. See [`web/README.md`](web/README.md) to run it, and
 [`web/docs/API.md`](web/docs/API.md) for the REST API reference.
+
+![synreplace web interface, showing the controls, a rewritten result, and the substitutions table](docs/web-ui.png)
+
+A few things it adds on top of the CLI:
+
+- **Pick and pool sources visually** — check any combination of WordNet,
+  Datamuse and the Free Dictionary API; results are merged live.
+- **Reset or swap any substitution.** Every row in the substitutions table has
+  a Reset button back to the original word, plus up to 3 alternative-synonym
+  chips to swap in instead — the result text updates immediately, no re-run
+  needed.
+- **Click a changed word to find it.** Clicking a word in the table highlights
+  and scrolls to its exact spot in the result text.
+- **Live parameter descriptions** under every control, and a loading indicator
+  while a request is in flight (the online sources can take a few seconds).
+
+## Project layout
+
+```
+synreplace/    The CLI + library: WordNet lookup, the two online sources,
+               inflection, tokenizer, and the rewrite engine every entry
+               point (CLI/library/API/UI) shares.
+tests/         Tracked test suite (see Tests below).
+web/           The browser UI + REST API — a separate app that reuses the
+               synreplace engine; see web/README.md.
+  backend/     FastAPI app (routes, request/response schemas).
+  frontend/    Plain HTML/CSS/JS, no build step.
+  docs/API.md  REST API reference.
+docs/          Assets for this README (e.g. the screenshot above).
+```
+
+## Tests
+
+```bash
+python -m unittest discover -s tests -v
+```

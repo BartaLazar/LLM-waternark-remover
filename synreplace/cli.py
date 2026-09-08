@@ -8,6 +8,7 @@ from . import __version__
 from .clipboard import ClipboardError, copy, paste
 from .corpora import ensure_corpora
 from .rewrite import rewrite
+from .sources import DEFAULT_SOURCES, SOURCE_DESCRIPTIONS, SOURCE_NAMES
 
 EPILOG = """\
 input is taken from, in order of precedence:
@@ -17,6 +18,15 @@ input is taken from, in order of precedence:
 --input FILE without --output writes to FILE-modified next to FILE, rather
 than to stdout.
 
+sources (--sources NAME[,NAME...], default: wordnet):
+%s
+
+  Naming more than one pools their candidates together rather than picking
+  one -- e.g. --sources wordnet,datamuse considers both. The online sources
+  need a network connection and are slower and less predictable than the
+  offline default. --senses/--threshold apply to every enabled source, not
+  just wordnet -- see README.md for what they mean for each one.
+
 examples:
   synreplace -n 3 "the quick brown fox jumps over the lazy dog"
   cat draft.md | synreplace -n 5 > rewritten.md
@@ -24,13 +34,30 @@ examples:
   synreplace -i draft.txt -o out.txt -v
   synreplace --clip -n 4
   synreplace --senses 3 --threshold 0.8 -v "the quick brown fox jumps"
-"""
+  synreplace --sources wordnet,datamuse -v "the quick brown fox jumps"
+""" % "\n".join("  %-14s %s" % (name, SOURCE_DESCRIPTIONS[name]) for name in SOURCE_NAMES)
 
 
 def default_output_path(input_path: str) -> str:
     """FILE -> FILE-modified next to it, e.g. draft.txt -> draft-modified.txt."""
     path = Path(input_path)
     return str(path.with_name(path.stem + "-modified" + path.suffix))
+
+
+def source_list(value: str):
+    """argparse type for --sources: a comma-separated list of source names,
+    validated against SOURCE_NAMES so a typo fails fast with a clear message
+    rather than surfacing later as an obscure lookup error."""
+    names = [name.strip() for name in value.split(",") if name.strip()]
+    if not names:
+        raise argparse.ArgumentTypeError("at least one source is required")
+    unknown = [name for name in names if name not in SOURCE_NAMES]
+    if unknown:
+        raise argparse.ArgumentTypeError(
+            "unknown source(s): %s (choose from %s)"
+            % (", ".join(unknown), ", ".join(SOURCE_NAMES))
+        )
+    return names
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -71,6 +98,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--multiword", action="store_true",
         help="allow multi-word synonyms such as 'give up'",
+    )
+    parser.add_argument(
+        "--sources", type=source_list, default=list(DEFAULT_SOURCES), metavar="NAME[,NAME...]",
+        help="synonym source(s) to use, comma-separated (default: wordnet); "
+             "see below for the full list",
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true",
@@ -165,6 +197,7 @@ def main(argv=None) -> int:
         allow_multiword=args.multiword,
         slide=args.slide,
         threshold=args.threshold,
+        sources=args.sources,
     )
 
     try:
