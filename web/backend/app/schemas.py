@@ -111,6 +111,15 @@ class TextToken(BaseModel):
         description="1-based word ordinal (matches Replacement.position), or "
                      "null for a non-word token.",
     )
+    original: Optional[str] = Field(
+        None,
+        description="Set only for a word whose text changed as a side effect "
+                     "of a *different* word's substitution (currently just "
+                     "'a'/'an' agreement, e.g. 'a' -> 'an' before a replacement "
+                     "that now starts with a vowel sound) rather than being a "
+                     "substitution in its own right -- it has no entry of its "
+                     "own in `replacements`. Null for every other token.",
+    )
 
 
 class RewriteResponse(BaseModel):

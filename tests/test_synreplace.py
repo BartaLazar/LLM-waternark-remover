@@ -3,8 +3,8 @@ from unittest.mock import patch
 
 from synreplace import rewrite, rewrite_tokens
 from synreplace.corpora import ensure_corpora
-from synreplace.inflect import add_ed, add_ing, add_s, match_case
-from synreplace.online import DatamuseSource, DictionaryApiSource
+from synreplace.inflect import add_ed, add_ing, add_s, fix_article, match_case, starts_with_vowel_sound
+from synreplace.online import DatamuseSource
 from synreplace.sources import CompositeSource, SOURCE_NAMES, make_source
 from synreplace.synonyms import SynonymFinder
 from synreplace.tokens import detokenize, tokenize
@@ -137,6 +137,34 @@ class TestInflect(unittest.TestCase):
         self.assertEqual(match_case("dog", "hound"), "hound")
         self.assertEqual(match_case("A", "one"), "One")
 
+    def test_starts_with_vowel_sound_uses_pronunciation_not_spelling(self):
+        self.assertTrue(starts_with_vowel_sound("hour"))  # silent h
+        self.assertTrue(starts_with_vowel_sound("individual"))
+        self.assertFalse(starts_with_vowel_sound("university"))  # spelled with u, sounds like "y"
+        self.assertFalse(starts_with_vowel_sound("one"))  # sounds like "w"
+        self.assertFalse(starts_with_vowel_sound("single"))
+
+    def test_starts_with_vowel_sound_checks_only_the_first_word_of_a_phrase(self):
+        self.assertTrue(starts_with_vowel_sound("individual choice"))
+        self.assertFalse(starts_with_vowel_sound("single handedly"))
+
+    def test_starts_with_vowel_sound_falls_back_to_spelling_for_unknown_words(self):
+        # Not real words, so not in cmudict -- falls back to the first letter.
+        self.assertTrue(starts_with_vowel_sound("orblexis"))
+        self.assertFalse(starts_with_vowel_sound("zorblex"))
+
+    def test_fix_article_flips_a_and_an_as_needed(self):
+        self.assertEqual(fix_article("a", "individual"), "an")
+        self.assertEqual(fix_article("an", "single"), "a")
+
+    def test_fix_article_preserves_case(self):
+        self.assertEqual(fix_article("A", "individual"), "An")
+        self.assertEqual(fix_article("An", "single"), "A")
+
+    def test_fix_article_leaves_an_already_correct_article_unchanged(self):
+        self.assertEqual(fix_article("A", "single"), "A")
+        self.assertEqual(fix_article("An", "individual"), "An")
+
 
 class TestSynonymFinder(unittest.TestCase):
     @classmethod
@@ -249,10 +277,67 @@ class TestSynonymFinder(unittest.TestCase):
         self.assertAlmostEqual(similarity, 0.631578947368421)
 
 
+class _WordMapFinder:
+    """A fake finder that only "knows" a synonym for the exact words given it
+    (case-sensitive on purpose -- callers pass the word's own casing), so a
+    test can force one specific substitution in a hand-written sentence
+    without depending on WordNet's actual choice for that word."""
+
+    def __init__(self, mapping):
+        self._mapping = mapping
+
+    def find_top(self, word, tag, limit=4):
+        return self._mapping.get(word, [])[:limit]
+
+
 class TestRewrite(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         ensure_corpora(quiet=True)
+
+    def test_article_flips_to_an_before_a_vowel_sounding_replacement(self):
+        finder = _WordMapFinder({"single": [("individual", 1.0)]})
+        result, _ = rewrite("A single discovery matters here today.", every=1, slide=True, finder=finder)
+        self.assertEqual(result, "An individual discovery matters here today.")
+
+    def test_article_flips_to_a_before_a_consonant_sounding_replacement(self):
+        finder = _WordMapFinder({"individual": [("single", 1.0)]})
+        result, _ = rewrite("An individual discovery matters here today.", every=1, slide=True, finder=finder)
+        self.assertEqual(result, "A single discovery matters here today.")
+
+    def test_article_fix_uses_pronunciation_not_spelling(self):
+        # "university" is spelled with a leading vowel but sounds like "y" --
+        # the naive letter-based check would wrongly produce "an university".
+        finder = _WordMapFinder({"school": [("university", 1.0)]})
+        result, _ = rewrite("A school trip starts soon.", every=1, slide=True, finder=finder)
+        self.assertEqual(result, "A university trip starts soon.")
+        # "hour" has a silent h, a consonant letter with a vowel sound.
+        finder = _WordMapFinder({"meeting": [("hour", 1.0)]})
+        result, _ = rewrite("A meeting starts soon.", every=1, slide=True, finder=finder)
+        self.assertEqual(result, "An hour starts soon.")
+
+    def test_article_left_alone_when_already_correct(self):
+        finder = _WordMapFinder({"quick": [("swift", 1.0)]})
+        result, _ = rewrite("A quick fox runs.", every=1, slide=True, finder=finder)
+        self.assertEqual(result, "A swift fox runs.")
+
+    def test_article_fix_is_not_recorded_as_its_own_replacement(self):
+        finder = _WordMapFinder({"single": [("individual", 1.0)]})
+        _, replacements = rewrite("A single discovery matters here today.", every=1, slide=True, finder=finder)
+        self.assertEqual([r.original for r in replacements], ["single"])
+
+    def test_article_fix_records_its_own_true_original_on_the_token(self):
+        # rewrite_tokens (not rewrite) so the fixed article's *own* prior text
+        # is recoverable -- a caller reconstructing "what did this say before"
+        # (the web UI's Duplicate view) needs it, since it isn't a Replacement.
+        finder = _WordMapFinder({"single": [("individual", 1.0)]})
+        tokens, _ = rewrite_tokens("A single discovery matters here today.", every=1, slide=True, finder=finder)
+        article_token = next(t for t in tokens if t.is_word and t.text == "An")
+        self.assertEqual(article_token.original_text, "A")
+        # An untouched word's original_text stays None -- only a token whose
+        # text a fix actually changed carries one.
+        untouched = next(t for t in tokens if t.is_word and t.text == "discovery")
+        self.assertIsNone(untouched.original_text)
 
     def test_only_targeted_positions_change(self):
         result, replacements = rewrite(SAMPLE, every=4)
@@ -486,25 +571,6 @@ DATAMUSE_HAPPY_ADJ = [
     {"word": "promptly", "score": 30027, "tags": ["adv"]},  # wrong POS, must be filtered out
 ]
 
-DICTIONARYAPI_HAPPY = [
-    {
-        "word": "happy",
-        "meanings": [
-            {
-                "partOfSpeech": "noun",
-                "definitions": [{"definition": "A happy event.", "synonyms": []}],
-                "synonyms": [],
-            },
-            {
-                "partOfSpeech": "adjective",
-                "definitions": [{"definition": "Feeling happy.", "synonyms": []}],
-                "synonyms": ["cheerful", "content", "delighted", "elated"],
-            },
-        ],
-    }
-]
-
-
 class TestDatamuseSource(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -560,82 +626,6 @@ class TestDatamuseSource(unittest.TestCase):
     def test_untagged_parts_of_speech_are_left_alone(self):
         source = DatamuseSource()
         self.assertEqual(source.find_top("the", "DT"), [])
-
-
-class TestDictionaryApiSource(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        ensure_corpora(quiet=True)
-
-    def test_extracts_synonyms_for_the_matching_part_of_speech_only(self):
-        with patch("synreplace.online._get_json", return_value=DICTIONARYAPI_HAPPY):
-            source = DictionaryApiSource()
-            results = source.find_top("happy", "JJ", limit=4)
-        words = [w for w, _ in results]
-        self.assertEqual(words, ["cheerful", "content", "delighted", "elated"])
-        # This fixture's only adjective meaning is the dominant (index 0)
-        # one, so every candidate from it scores 1.0.
-        self.assertTrue(all(sim == 1.0 for _, sim in results))
-
-    def test_candidates_from_a_later_meaning_score_lower(self):
-        two_meanings = [
-            {
-                "word": "cool",
-                "meanings": [
-                    {"partOfSpeech": "adjective", "definitions": [],
-                     "synonyms": ["chilly"]},
-                    {"partOfSpeech": "adjective", "definitions": [],
-                     "synonyms": ["stylish"]},
-                ],
-            }
-        ]
-        with patch("synreplace.online._get_json", return_value=two_meanings):
-            results = DictionaryApiSource(threshold=0).find_top("cool", "JJ", limit=4)
-        results_by_word = dict(results)
-        self.assertEqual(results_by_word["chilly"], 1.0)
-        self.assertEqual(results_by_word["stylish"], DictionaryApiSource.NON_DOMINANT_SIMILARITY)
-
-    def test_default_threshold_drops_non_dominant_meanings(self):
-        two_meanings = [
-            {
-                "word": "cool",
-                "meanings": [
-                    {"partOfSpeech": "adjective", "definitions": [], "synonyms": ["chilly"]},
-                    {"partOfSpeech": "adjective", "definitions": [], "synonyms": ["stylish"]},
-                ],
-            }
-        ]
-        with patch("synreplace.online._get_json", return_value=two_meanings):
-            strict = DictionaryApiSource().find_top("cool", "JJ", limit=4)
-            loose = DictionaryApiSource(threshold=0).find_top("cool", "JJ", limit=4)
-        self.assertEqual([w for w, _ in strict], ["chilly"])
-        self.assertEqual({w for w, _ in loose}, {"chilly", "stylish"})
-
-    def test_senses_caps_how_many_meanings_are_searched(self):
-        two_meanings = [
-            {
-                "word": "cool",
-                "meanings": [
-                    {"partOfSpeech": "adjective", "definitions": [], "synonyms": ["chilly"]},
-                    {"partOfSpeech": "adjective", "definitions": [], "synonyms": ["stylish"]},
-                ],
-            }
-        ]
-        with patch("synreplace.online._get_json", return_value=two_meanings):
-            capped = DictionaryApiSource(senses=1, threshold=0).find_top("cool", "JJ", limit=4)
-        self.assertEqual([w for w, _ in capped], ["chilly"])
-
-    def test_network_failure_yields_empty_list_not_an_exception(self):
-        with patch("synreplace.online._get_json", return_value=None):
-            source = DictionaryApiSource()
-            self.assertEqual(source.find_top("happy", "JJ"), [])
-
-    def test_repeated_lookup_is_cached(self):
-        with patch("synreplace.online._get_json", return_value=DICTIONARYAPI_HAPPY) as mock_get:
-            source = DictionaryApiSource()
-            source.find_top("happy", "JJ")
-            source.find_top("happy", "JJ")
-        self.assertEqual(mock_get.call_count, 1)
 
 
 class _StubSource:

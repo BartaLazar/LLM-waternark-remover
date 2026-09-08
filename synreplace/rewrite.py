@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import List, Optional, Sequence, Tuple
 
-from .inflect import match_case
+from .inflect import fix_article, match_case
 from .sources import DEFAULT_SOURCES, make_source
 from .tokens import Token, detokenize, tokenize
 
@@ -112,6 +112,19 @@ def rewrite_tokens(
         replacements.append(
             Replacement(ordinal, original, tokens[token_index].text, similarity, alternatives)
         )
+        # A synonym swap can change whether the word now starts with a vowel
+        # sound, stranding "a"/"an" on the wrong side of it ("a single
+        # discovery" -> "a individual discovery"): fix the immediately
+        # preceding word if it's actually that article. Not itself recorded
+        # as a Replacement -- like re-inflection, it's a grammatical
+        # side-effect of this substitution, not a substitution of its own.
+        if ordinal >= 2:
+            article_token = tokens[word_indices[ordinal - 2]]
+            if article_token.text.lower() in ("a", "an"):
+                fixed = fix_article(article_token.text, tokens[token_index].text)
+                if fixed != article_token.text:
+                    article_token.original_text = article_token.text
+                    article_token.text = fixed
         # Measure the next interval from where we actually landed, so sliding
         # never bunches two substitutions closer than N words apart.
         next_target = ordinal + every

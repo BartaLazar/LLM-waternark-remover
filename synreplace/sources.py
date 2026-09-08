@@ -1,26 +1,30 @@
 """Picks and combines synonym sources.
 
 A "source" is any object exposing `find(word, tag)` / `find_top(word, tag,
-limit)` -- `SynonymFinder` (offline WordNet), `DatamuseSource`, and
-`DictionaryApiSource` (both online) all satisfy this. One or more source
-*names* are resolved to source objects here, and combined into one via
-`CompositeSource` when more than one is requested.
+limit)` -- `SynonymFinder` (offline WordNet) and `DatamuseSource` (online)
+both satisfy this. One or more source *names* are resolved to source objects
+here, and combined into one via `CompositeSource` when more than one is
+requested.
 """
 
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from .online import DatamuseSource, DictionaryApiSource
+from .online import DatamuseSource
 from .synonyms import SynonymFinder
 
 # Every valid source name, and what each one actually is -- shown to users
 # (CLI --help, the web API's /info, the web UI's source picker) so this is
 # the one place that needs updating to add another source later.
-SOURCE_NAMES: Tuple[str, ...] = ("wordnet", "datamuse", "dictionaryapi")
+#
+# A third source, backed by the Free Dictionary API, used to be offered here
+# too (as "dictionaryapi"); it was removed entirely -- code, tests, and all --
+# after proving unreliable in practice (frequent timeouts, inconsistent
+# coverage).
+SOURCE_NAMES: Tuple[str, ...] = ("wordnet", "datamuse")
 
 SOURCE_DESCRIPTIONS: Dict[str, str] = {
     "wordnet": "Standard dictionary (WordNet, offline, no network needed)",
     "datamuse": "Datamuse API (online, no key needed)",
-    "dictionaryapi": "Free Dictionary API (online, no key needed)",
 }
 
 DEFAULT_SOURCES: Tuple[str, ...] = ("wordnet",)
@@ -68,10 +72,10 @@ def make_source(
 ) -> object:
     """Builds the source (or `CompositeSource` of several) for `names`.
 
-    `senses`/`threshold` apply to every source, not just `wordnet` -- each
+    `senses`/`threshold` apply to every source, not just `wordnet` -- the
     online source reinterprets them for its own shape of data (see
-    `DatamuseSource`/`DictionaryApiSource`'s docstrings for what "sense" and
-    "similarity" mean for that particular one), rather than ignoring them.
+    `DatamuseSource`'s docstring for what "sense" and "similarity" mean
+    there), rather than ignoring them.
     """
     names = list(dict.fromkeys(names))  # de-duplicate, keep first-seen order
     if not names:
@@ -86,9 +90,7 @@ def make_source(
     for name in names:
         if name == "wordnet":
             built.append(SynonymFinder(senses=senses, allow_multiword=allow_multiword, threshold=threshold))
-        elif name == "datamuse":
+        else:  # "datamuse"
             built.append(DatamuseSource(senses=senses, allow_multiword=allow_multiword, threshold=threshold))
-        else:  # "dictionaryapi"
-            built.append(DictionaryApiSource(senses=senses, allow_multiword=allow_multiword, threshold=threshold))
 
     return built[0] if len(built) == 1 else CompositeSource(built)

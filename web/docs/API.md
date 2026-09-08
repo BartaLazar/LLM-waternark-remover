@@ -100,11 +100,6 @@ hardcoding defaults that could drift from the server's.
       "name": "datamuse",
       "description": "Datamuse API (online, no key needed)",
       "online": true
-    },
-    {
-      "name": "dictionaryapi",
-      "description": "Free Dictionary API (online, no key needed)",
-      "online": true
     }
   ]
 }
@@ -269,7 +264,6 @@ one to use.
 | --- | --- | --- |
 | `wordnet` | Offline WordNet lookup (the default) | No |
 | `datamuse` | [Datamuse](https://www.datamuse.com/api/), built specifically for word-relation queries; returns a relevance score per candidate | Yes |
-| `dictionaryapi` | [Free Dictionary API](https://dictionaryapi.dev/), a definitions API with synonyms as a secondary field; coverage varies a lot by word | Yes |
 
 **`senses`/`threshold` apply to every enabled source**, each reinterpreting
 them for its own shape of data:
@@ -281,12 +275,6 @@ them for its own shape of data:
   hit, falls below it. Datamuse doesn't disambiguate word senses at all, so
   it can still occasionally surface a synonym for the wrong meaning of a word
   if a wrong-meaning result happens to score close to the top one.
-- **`dictionaryapi`**: this API's response is naturally grouped into one
-  entry per meaning of the word, in the order it lists them (its own implicit
-  "most common first"). `senses` caps how many meaning-entries are searched;
-  every candidate from the first one scores `1.0`, every candidate from a
-  later one scores a flat `0.5` — not a measured relatedness value like
-  WordNet's, since this API doesn't expose anything to compute one from.
 
 Other trade-offs worth knowing:
 
@@ -297,10 +285,9 @@ Other trade-offs worth knowing:
   no candidates for that request, and prints a one-time note to the server's
   stderr the first time that happens.
 - **`similarity` isn't on the same scale across sources.** WordNet's is a
-  graph-distance score, Datamuse's is a normalized relevance score, and
-  `dictionaryapi`'s is one of two fixed values. All three are reported as a
-  `0.0`–`1.0` float for a consistent shape, but the numbers aren't measuring
-  the same thing.
+  graph-distance score and Datamuse's is a normalized relevance score. Both
+  are reported as a `0.0`–`1.0` float for a consistent shape, but the numbers
+  aren't measuring the same thing.
 
 ## Error format
 

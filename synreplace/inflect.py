@@ -133,3 +133,33 @@ def match_case(original: str, replacement: str) -> str:
     if original[:1].isupper():
         return replacement[:1].upper() + replacement[1:]
     return replacement
+
+
+def starts_with_vowel_sound(text: str) -> bool:
+    """True if `text` is *pronounced* starting with a vowel sound -- "hour"
+    (silent h), "individual" -- false for a consonant sound even after a
+    vowel letter -- "university", "one" (both start with a /j/ or /w/ glide).
+    Decided from pronunciation data when the word has an entry (a vowel
+    phone always carries a trailing stress digit, a consonant phone never
+    does -- see `_pronunciations`); falls back to the first letter for a
+    word cmudict doesn't know. Only the first word of a multi-word
+    replacement (`allow_multiword`) matters, e.g. "individual choice".
+    """
+    word = text.split()[0].lower() if text.split() else text.lower()
+    pronunciations = _pronunciations(word)
+    if pronunciations:
+        first_phone = pronunciations[0][0]
+        return first_phone[-1].isdigit()
+    return word[:1] in VOWELS
+
+
+def fix_article(article: str, following_text: str) -> str:
+    """Return `article` ("a"/"an", in whatever case) corrected to match
+    whether `following_text` now starts with a vowel sound, so a synonym
+    swap can't strand "a" in front of a vowel sound or "an" in front of a
+    consonant one ("a single discovery" -> "an individual discovery", and
+    back). A leading capital carries over via `match_case`; an article that
+    was already right comes back unchanged.
+    """
+    correct = "an" if starts_with_vowel_sound(following_text) else "a"
+    return match_case(article, correct)

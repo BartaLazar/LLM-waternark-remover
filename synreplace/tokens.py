@@ -6,7 +6,7 @@ so punctuation, newlines and odd spacing survive a rewrite untouched.
 
 import re
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 # A word is letters, optionally joined by straight or curly apostrophes
 # ("don't", "rock'n'roll"). Digits and punctuation fall into the gaps.
@@ -17,6 +17,12 @@ WORD_RE = re.compile(r"[A-Za-z]+(?:['’][A-Za-z]+)*")
 class Token:
     text: str
     is_word: bool  # False for the whitespace/punctuation runs between words
+    # Set by a caller (e.g. rewrite_tokens' a/an fix) that silently changes a
+    # word's text as a side effect of some *other* substitution, without
+    # treating this token's own change as a substitution in its own right --
+    # a Replacement covers a word's own change, this is the other kind. None
+    # for every token whose text is exactly what tokenize() produced.
+    original_text: Optional[str] = None
 
 
 def tokenize(text: str) -> List[Token]:

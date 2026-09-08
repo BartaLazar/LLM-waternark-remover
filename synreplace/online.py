@@ -1,14 +1,20 @@
 """Synonym sources backed by free, tokenless online dictionary APIs.
 
-Both classes here expose the same interface as `SynonymFinder`
+`DatamuseSource` here exposes the same interface as `SynonymFinder`
 (`find(word, tag)` / `find_top(word, tag, limit)`), so `rewrite_tokens()` can
-use any of them interchangeably -- see `SOURCES` in `rewrite.py`.
+use it interchangeably with the offline source -- see `SOURCES` in
+`rewrite.py`.
 
-Trade-off versus the offline WordNet source: these need a live network
+Trade-off versus the offline WordNet source: it needs a live network
 connection and one HTTP request per distinct word looked up (cached per
-source instance, so a repeated word costs only one request per run), and are
-both slower and less predictable than the fully local WordNet path -- a
-public API can rate-limit, go down, or change its data at any time.
+source instance, so a repeated word costs only one request per run), and is
+slower and less predictable than the fully local WordNet path -- a public
+API can rate-limit, go down, or change its data at any time.
+
+(A second online source, backed by the Free Dictionary API, used to live
+here too -- it was removed after proving unreliable in practice: frequent
+timeouts and inconsistent coverage. See git history if it's ever worth
+resurrecting.)
 """
 
 import json
@@ -172,101 +178,3 @@ class DatamuseSource:
         ]
         self._cache[lemma] = parsed
         return parsed
-
-
-class DictionaryApiSource:
-    """Synonyms from the Free Dictionary API (https://dictionaryapi.dev/) --
-    free, no key or signup. It's a definitions API with synonyms as a
-    secondary field per sense, not a dedicated synonym endpoint, so coverage
-    varies a lot by word: some senses list a dozen synonyms, others none at
-    all. It reports no relevance score, but its response *is* naturally
-    grouped into one entry per meaning of the word, in the order the API
-    lists them (its own implicit "most common first" ordering) -- so unlike
-    Datamuse, `senses`/`threshold` map onto real structure here rather than
-    a stand-in for one: `senses` caps how many of those meaning-entries (for
-    the wanted part of speech) are searched, and every candidate from the
-    first one scores 1.0 (the "dominant sense") while candidates from any
-    later one score `NON_DOMINANT_SIMILARITY` -- a flat marked-down value,
-    not a measured relatedness like WordNet's Wu-Palmer score, since this API
-    doesn't expose anything to actually measure that with.
-    """
-
-    _DICT_POS = {"n": "noun", "v": "verb", "a": "adjective", "r": "adverb"}
-    NON_DOMINANT_SIMILARITY = 0.5
-
-    def __init__(self, senses: int = 3, allow_multiword: bool = False, threshold: float = 0.95) -> None:
-        self.senses = max(1, senses)
-        self.allow_multiword = allow_multiword
-        self.threshold = threshold
-        self.inflector = Inflector()
-        self._cache: Dict[str, List[Tuple[str, List[str]]]] = {}
-        self._warn = _WarnOnce()
-
-    def find(self, word: str, tag: str) -> Optional[Tuple[str, float]]:
-        results = self.find_top(word, tag, limit=1)
-        return results[0] if results else None
-
-    def find_top(self, word: str, tag: str, limit: int = 4) -> List[Tuple[str, float]]:
-        mapping = TAG_MAP.get(tag)
-        if mapping is None:
-            return []
-        pos, form = mapping
-        lemma = eligible_lemma(word, pos, self.inflector)
-        if lemma is None:
-            return []
-
-        wanted_pos = self._DICT_POS[pos]
-        # Same order as SynonymFinder: filter to the matching part of speech
-        # first, *then* cap to `senses` -- so the cap always keeps the K
-        # meanings the API considers most relevant to this word, the same
-        # way synsets(lemma, pos=pos)[:senses] does for WordNet.
-        matching_meanings = [
-            synonyms for entry_pos, synonyms in self._query(lemma) if entry_pos == wanted_pos
-        ]
-
-        results: List[Tuple[str, float]] = []
-        seen_inflected = {word.lower()}
-        seen_raw: set = set()
-        for meaning_index, synonyms in enumerate(matching_meanings[: self.senses]):
-            similarity = 1.0 if meaning_index == 0 else self.NON_DOMINANT_SIMILARITY
-            if self.threshold > 0 and similarity < self.threshold:
-                continue
-            for synonym in synonyms:
-                if synonym in seen_raw:
-                    continue
-                seen_raw.add(synonym)
-                normalized = synonym.lower()
-                if not _candidate_ok(normalized, lemma, self.allow_multiword):
-                    continue
-                inflected = self.inflector.inflect(normalized, pos, form)
-                if inflected is None or inflected in seen_inflected:
-                    continue
-                seen_inflected.add(inflected)
-                results.append((inflected, similarity))
-                if len(results) >= limit:
-                    return results
-        return results
-
-    def _query(self, lemma: str) -> List[Tuple[str, List[str]]]:
-        """(part-of-speech, synonyms) for every meaning of `lemma`, one entry
-        per meaning in the API's own order -- cached per lemma (not per part
-        of speech) so looking the same lemma up as two different word
-        classes still costs one request per run."""
-        if lemma in self._cache:
-            return self._cache[lemma]
-        url = "https://api.dictionaryapi.dev/api/v2/entries/en/" + urllib.parse.quote(lemma)
-        data = _get_json(url)
-        if data is None:
-            self._warn("Free Dictionary API request failed or timed out; "
-                       "some words may come back with no synonyms.")
-            data = []
-        meanings: List[Tuple[str, List[str]]] = []
-        for entry in data:
-            for meaning in entry.get("meanings", []):
-                entry_pos = meaning.get("partOfSpeech", "")
-                synonyms = list(meaning.get("synonyms") or [])
-                for definition in meaning.get("definitions", []):
-                    synonyms.extend(definition.get("synonyms") or [])
-                meanings.append((entry_pos, synonyms))
-        self._cache[lemma] = meanings
-        return meanings
