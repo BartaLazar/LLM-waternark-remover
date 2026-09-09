@@ -35,6 +35,7 @@ web interface:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+pip install --upgrade pip       # older pip can't do an editable install from pyproject.toml
 pip install -e .                # the synreplace CLI package itself
 pip install -r requirements.txt # nltk + the web interface's fastapi/uvicorn/pydantic
 ```

@@ -68,6 +68,7 @@ The same rewrite, from the browser UI:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+pip install --upgrade pip  # older pip can't do an editable install from pyproject.toml
 pip install -e .
 ```
 
