@@ -300,3 +300,7 @@ python -m unittest discover -s tests -v
 ## License
 
 [MIT](LICENSE)
+
+---
+
+Developed with the help of Claude, as a side project to explore its coding integration capabilities.
