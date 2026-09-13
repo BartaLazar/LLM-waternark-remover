@@ -303,4 +303,4 @@ python -m unittest discover -s tests -v
 
 ---
 
-Developed with the help of Claude, as a side project to explore its LLM integration capabilities.
+Developed with the help of Claude, as a side project to explore its coding integration capabilities.
